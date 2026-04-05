@@ -11,6 +11,10 @@
   // DOM
   const videoFile = document.getElementById('videoFile');
   const video = document.getElementById('videoPlayer');
+  const changeSpeed = document.getElementById('changeSpeed');
+  const speedInc = document.getElementById('speedInc');
+  const speedDec = document.getElementById('speedDec');
+  const stepInput = document.getElementById('stepSize');
   const addStateBtn = document.getElementById('addState');
   const stateList = document.getElementById('stateList');
   const eventList = document.getElementById('eventList');
@@ -30,6 +34,9 @@
     if(!f) return;
     video.src = URL.createObjectURL(f);
     video.dataset.filename = f.name;
+    // apply selected playback speed when loading a file
+    const sp = parseFloat(changeSpeed && changeSpeed.value) || 1.0;
+    video.playbackRate = sp;
   });
 
   setStartStateBtn.addEventListener('click', ()=>{
@@ -38,6 +45,104 @@
     renderStateList();
     saveAutosave();
   });
+
+  // playback speed control
+  if(changeSpeed){
+    changeSpeed.addEventListener('input', ()=>{
+      const v = parseFloat(changeSpeed.value) || 1.0;
+      video.playbackRate = v;
+      saveAutosave();
+    });
+  }
+
+  // +/- buttons
+  function setSpeedVal(v){
+    const min = parseFloat(changeSpeed.min) || 0.25;
+    const max = parseFloat(changeSpeed.max) || 4.0;
+    const step = parseFloat(changeSpeed.step) || 0.25;
+    let nv = Math.min(max, Math.max(min, Math.round(v/step)*step));
+    changeSpeed.value = nv.toFixed(2).replace(/\.00$/, '');
+    video.playbackRate = nv;
+    saveAutosave();
+  }
+  if(speedInc){ speedInc.addEventListener('click', ()=>{ setSpeedVal((parseFloat(changeSpeed.value)||1.0) + (parseFloat(changeSpeed.step)||0.25)); }); }
+  if(speedDec){ speedDec.addEventListener('click', ()=>{ setSpeedVal((parseFloat(changeSpeed.value)||1.0) - (parseFloat(changeSpeed.step)||0.25)); }); }
+
+  // keyboard shortcuts for speed control
+  document.addEventListener('keydown', (e)=>{
+    // don't interfere when typing in inputs
+    const ae = document.activeElement && document.activeElement.tagName;
+    if(ae === 'INPUT' || ae === 'TEXTAREA' || ae === 'SELECT') return;
+    const step = parseFloat(changeSpeed.step) || 0.25;
+    // Left/Right: step through video by stepSize (hold Shift for 1s jump)
+    if(e.key === 'ArrowLeft'){
+      const stepSec = parseFloat(stepInput && stepInput.value) || 0.033;
+      const delta = e.shiftKey ? 1.0 : stepSec;
+      video.currentTime = Math.max(0, (video.currentTime || 0) - delta);
+      e.preventDefault();
+    }
+    if(e.key === 'ArrowRight'){
+      const stepSec = parseFloat(stepInput && stepInput.value) || 0.033;
+      const delta = e.shiftKey ? 1.0 : stepSec;
+      video.currentTime = Math.min((video.duration||Infinity), (video.currentTime || 0) + delta);
+      e.preventDefault();
+    }
+    
+    // alternate speed keys requested: q/w/a/s
+    if(e.key === 'q'){ setSpeedVal(0.5); }
+    if(e.key === 'w'){ setSpeedVal(1.0); }
+    if(e.key === 'a'){ setSpeedVal(2.0); }
+    if(e.key === 's'){ setSpeedVal(3.0); }
+
+    // frame stepping (up/down)
+    // Up/Down: adjust playback speed by step value
+    if(e.key === 'ArrowUp'){
+      setSpeedVal((parseFloat(changeSpeed.value)||1.0) + (parseFloat(changeSpeed.step)||0.25));
+      e.preventDefault();
+    }
+    if(e.key === 'ArrowDown'){
+      setSpeedVal((parseFloat(changeSpeed.value)||1.0) - (parseFloat(changeSpeed.step)||0.25));
+      e.preventDefault();
+    }
+
+    // seek and playback
+    if(e.key === 'z'){ // back 10s
+      video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
+      e.preventDefault();
+    }
+    if(e.key === 'c'){ // forward 10s
+      video.currentTime = Math.min((video.duration||Infinity), (video.currentTime || 0) + 10);
+      e.preventDefault();
+    }
+    if(e.key === 'x'){ // play/pause toggle
+      if(video.paused) video.play(); else video.pause();
+      e.preventDefault();
+    }
+
+    // events: toggle grooming / rearing
+    if(e.key === 'g'){ toggleEventByName('GROOMING'); }
+    if(e.key === 'r'){ toggleEventByName('REARING'); }
+
+    // state switch
+    if(e.key === 'j'){ if(addStateBtn) addStateBtn.click(); }
+  });
+
+  // helper: toggle named event start/stop
+  function toggleEventByName(evName){
+    if(!evName) return;
+    if(activeEvents[evName]){
+      // stop
+      const s = activeEvents[evName];
+      const e = +seconds().toFixed(3);
+      eventTimeline.push({start: s, end: e, event: evName});
+      delete activeEvents[evName];
+      renderEventList(); saveAutosave();
+    } else {
+      // start
+      activeEvents[evName] = +seconds().toFixed(3);
+      renderEventList(); saveAutosave();
+    }
+  }
 
   addStateBtn.addEventListener('click', ()=>{
     const t = +seconds().toFixed(3);
@@ -180,7 +285,8 @@
   }
 
   // init
-  loadAutosave(); loadConfig();
+  loadAutosave();
+  loadConfig();
 
   // expose for debugging
   window._oft = {stateTimeline, eventTimeline, buildOutput};
