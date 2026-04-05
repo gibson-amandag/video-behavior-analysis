@@ -85,15 +85,27 @@
         <h3 class="col-12">Behavioral Information</h3>
         <div class="col-md-4">
           <label class="form-label">Starting state</label>
-          <div class="d-flex">
-            <select id="startState" class="form-select form-select-sm me-2">
+          <div class="row">
+            <select id="startState" class="form-select form-select-sm me-2 col-12">
               <option value="EDGE">Edge</option>
               <option value="CENTER">Center</option>
             </select>
+            <button id="setStartState" class="btn btn-sm btn-secondary col-12">Set Start</button>
           </div>
         </div>
         <div class="col-md-4">
-          <button id="setStartState" class="btn btn-sm btn-secondary">Set Start</button>
+          Start Time
+          <div class="mt-2 row">
+              <button id="markIn" class="btn btn-outline-primary btn-sm me-2 col-12">Mark subject start time</button>
+              <button id="clearIn" class="btn btn-outline-secondary btn-sm me-3 col-12">Clear</button>
+              <div id="subjectInDisplay" class="text-muted col-12">Subject placed: —</div>
+            </div>
+          
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Duration (s)</label>
+          <input id="videoDur" class="form-control form-control-sm" type="number" min="0" step="any" value="600" />
+          <div class="form-text">Default 600s. Enter session duration in seconds (do not auto-fill from video).</div>
         </div>
       </div>
     </section>

@@ -7,6 +7,7 @@
   let stateTimeline = []; // entries: {start: seconds, state: 'EDGE'|'CENTER'}
   let eventTimeline = []; // entries: {start, end, event}
   let activeEvents = {}; // eventName -> startTime
+  let subjectInTime = null; // seconds when subject placed in apparatus
 
   // DOM
   const videoFile = document.getElementById('videoFile');
@@ -14,6 +15,10 @@
   const changeSpeed = document.getElementById('changeSpeed');
   const speedInc = document.getElementById('speedInc');
   const speedDec = document.getElementById('speedDec');
+  const markInBtn = document.getElementById('markIn');
+  const clearInBtn = document.getElementById('clearIn');
+  const subjectInDisplay = document.getElementById('subjectInDisplay');
+  const videoDurInput = document.getElementById('videoDur');
   const stepInput = document.getElementById('stepSize');
   const addStateBtn = document.getElementById('addState');
   const stateList = document.getElementById('stateList');
@@ -29,6 +34,26 @@
 
   function seconds(){ return video.currentTime || 0; }
 
+  function formatTimeSec(t){
+    if(t === null || t === undefined || Number.isNaN(t)) return '—';
+    const s = Number(t);
+    const hours = Math.floor(s/3600);
+    const mins = Math.floor((s%3600)/60);
+    const secs = Math.floor(s%60);
+    const ms = Math.floor((s - Math.floor(s)) * 1000);
+    if(hours>0){ return `${hours.toString().padStart(2,'0')}:${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}.${ms.toString().padStart(3,'0')}`; }
+    return `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}.${ms.toString().padStart(3,'0')}`;
+  }
+
+  function renderSubjectIn(){
+    let txt = `Subject in: ${subjectInTime!==null? formatTimeSec(subjectInTime): '—'}`;
+    // if duration available, show computed session end time
+    let dur = null;
+    if(videoDurInput && videoDurInput.value){ const p = parseFloat(videoDurInput.value); if(!Number.isNaN(p)) dur = p; }
+    if(subjectInTime !== null && dur !== null){ const endt = subjectInTime + dur; txt += ` — session end: ${formatTimeSec(endt)}`; }
+    subjectInDisplay.textContent = txt;
+  }
+
   videoFile.addEventListener('change', (e)=>{
     const f = e.target.files[0];
     if(!f) return;
@@ -38,6 +63,20 @@
     const sp = parseFloat(changeSpeed && changeSpeed.value) || 1.0;
     video.playbackRate = sp;
   });
+
+  // Do NOT auto-fill duration from video; default is provided in the form (600s)
+
+  // Mark subject in / clear
+  if(markInBtn){ markInBtn.addEventListener('click', ()=>{
+    subjectInTime = +seconds().toFixed(3);
+    renderSubjectIn();
+    saveAutosave();
+  }); }
+  if(clearInBtn){ clearInBtn.addEventListener('click', ()=>{
+    subjectInTime = null;
+    renderSubjectIn();
+    saveAutosave();
+  }); }
 
   setStartStateBtn.addEventListener('click', ()=>{
     const s = startStateSel.value;
@@ -237,18 +276,26 @@
   });
 
   function buildOutput(){
-    const duration = video.duration || null;
+    // prefer user-provided duration if present, otherwise default to 600s
+    let duration = 600;
+    if(videoDurInput && videoDurInput.value){
+      const parsed = parseFloat(videoDurInput.value);
+      if(!Number.isNaN(parsed)) duration = parsed;
+    }
     // compute state timeline with end times
     const states = stateTimeline.map((s,i)=>{
       const next = stateTimeline[i+1];
       return {start: s.start, end: next? next.start : (duration||null), state: s.state};
     });
+    // compute session end if subject placed
+    let session_end = null;
+    if(subjectInTime !== null){ session_end = subjectInTime + duration; }
     const out = {
       session_id: `${document.getElementById('subjectId').value || 'subject'}_OFT_${document.getElementById('date').value || new Date().toISOString().slice(0,10)}`,
       task: 'open_field',
       duration_s: duration,
       subject: {species:'rat', id: document.getElementById('subjectId').value || ''},
-      metadata: { video_file: video.dataset.filename||'', date: document.getElementById('date').value||'', time: document.getElementById('time').value||'', scorer: document.getElementById('scorer').value||'', comments: '' },
+      metadata: { video_file: video.dataset.filename||'', date: document.getElementById('date').value||'', time: document.getElementById('time').value||'', scorer: document.getElementById('scorer').value||'', comments: '' , subject_placed_at_s: subjectInTime, session_end_s: session_end, session_end_note: session_end !== null ? `Computed end = ${formatTimeSec(session_end)} (${session_end.toFixed(3)} s)` : ''},
       state_timeline: states,
       event_timeline: eventTimeline.slice(),
       tool_version: TOOL_VERSION,
@@ -268,11 +315,12 @@
   // Autosave to localStorage
   const AS_KEY = 'oft_scoring_autosave_v0';
   function saveAutosave(){
-    const state = {stateTimeline, eventTimeline, activeEvents, metadata:{scorer:document.getElementById('scorer').value, subjectId:document.getElementById('subjectId').value}};
+    const vidDur = (videoDurInput && videoDurInput.value) ? parseFloat(videoDurInput.value) : 600;
+    const state = {stateTimeline, eventTimeline, activeEvents, metadata:{scorer:document.getElementById('scorer').value, subjectId:document.getElementById('subjectId').value, subject_in_time_s: subjectInTime, video_duration_s: vidDur}};
     try{ localStorage.setItem(AS_KEY, JSON.stringify(state)); }catch(e){}
   }
   function loadAutosave(){
-    try{ const raw = localStorage.getItem(AS_KEY); if(raw){ const s = JSON.parse(raw); if(s.stateTimeline) stateTimeline = s.stateTimeline; if(s.eventTimeline) eventTimeline = s.eventTimeline; if(s.activeEvents) activeEvents = s.activeEvents; renderStateList(); renderEventList(); } }catch(e){}
+    try{ const raw = localStorage.getItem(AS_KEY); if(raw){ const s = JSON.parse(raw); if(s.stateTimeline) stateTimeline = s.stateTimeline; if(s.eventTimeline) eventTimeline = s.eventTimeline; if(s.activeEvents) activeEvents = s.activeEvents; if(s.metadata && typeof s.metadata.subject_in_time_s !== 'undefined') subjectInTime = s.metadata.subject_in_time_s; if(s.metadata && typeof s.metadata.video_duration_s !== 'undefined' && s.metadata.video_duration_s !== null){ if(videoDurInput) videoDurInput.value = s.metadata.video_duration_s; } renderStateList(); renderEventList(); renderSubjectIn(); } }catch(e){}
   }
 
   // load config (yaml) if served via http(s). If not available, ignore.
