@@ -141,10 +141,32 @@
 
     <section class="timelines">
       <h2>State Timeline</h2>
-      <ul id="stateList"></ul>
+      <table class="table table-sm" id="stateTable">
+        <thead>
+          <tr>
+            <th>State</th>
+            <th>At time (s)</th>
+            <th>Time stamp</th>
+            <th>Duration (s)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="stateTableBody"></tbody>
+      </table>
 
       <h2>Event Timeline</h2>
-      <ul id="eventList"></ul>
+      <table class="table table-sm" id="eventTable">
+        <thead>
+          <tr>
+            <th>Event</th>
+            <th>Start (s)</th>
+            <th>Time stamp</th>
+            <th>Duration (s)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="eventTableBody"></tbody>
+      </table>
     </section>
 
     <section class="exports mt-3">

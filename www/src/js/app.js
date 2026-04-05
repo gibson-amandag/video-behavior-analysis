@@ -23,8 +23,8 @@
   const videoDurInput = document.getElementById('videoDur');
   const stepInput = document.getElementById('stepSize');
   const addStateBtn = document.getElementById('addState');
-  const stateList = document.getElementById('stateList');
-  const eventList = document.getElementById('eventList');
+  const stateTableBody = document.getElementById('stateTableBody');
+  const eventTableBody = document.getElementById('eventTableBody');
   const startEventBtn = document.getElementById('startEvent');
   const stopEventBtn = document.getElementById('stopEvent');
   const eventTypeSel = document.getElementById('eventType');
@@ -253,45 +253,75 @@
   });
 
   function renderStateList(){
-    stateList.innerHTML = '';
+    if(!stateTableBody) return;
+    stateTableBody.innerHTML = '';
     // compute session duration end time (subjectInTime + duration)
     let dur = null;
     if(videoDurInput && videoDurInput.value){ const p = parseFloat(videoDurInput.value); if(!Number.isNaN(p)) dur = p; }
     for(let i=0;i<stateTimeline.length;i++){
       const a = stateTimeline[i];
       const b = stateTimeline[i+1];
-      const li = document.createElement('li');
-      let endTxt = 'ONGOING';
-      if(b){ endTxt = b.start.toFixed(3); }
-      else if(dur !== null && subjectInTime !== null){ endTxt = (subjectInTime + dur).toFixed(3); }
-      li.textContent = `${a.start.toFixed(3)} → ${endTxt} : ${a.state}`;
-      const del = document.createElement('button'); del.textContent='Delete';
+      const tr = document.createElement('tr');
+      const tdState = document.createElement('td'); tdState.textContent = a.state;
+      const tdAt = document.createElement('td'); tdAt.textContent = (typeof a.start === 'number')? a.start.toFixed(3) : '—';
+      const tdStamp = document.createElement('td');
+      const link = document.createElement('a'); link.href = '#'; link.textContent = formatTimeSec(a.start);
+      link.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = a.start; video.pause(); }catch(e){} });
+      tdStamp.appendChild(link);
+      const tdDur = document.createElement('td');
+      let durVal = null;
+      if(b && typeof b.start === 'number') durVal = b.start - a.start;
+      else if(dur !== null && subjectInTime !== null) durVal = (subjectInTime + dur) - a.start;
+      tdDur.textContent = (durVal !== null && !Number.isNaN(durVal))? durVal.toFixed(3) : '—';
+      const tdAct = document.createElement('td');
+      const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
       del.addEventListener('click', ()=>{ stateTimeline.splice(i,1); renderStateList(); saveAutosave(); });
-      li.appendChild(del);
-      stateList.appendChild(li);
+      tdAct.appendChild(del);
+      tr.appendChild(tdState); tr.appendChild(tdAt); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
+      stateTableBody.appendChild(tr);
     }
   }
 
   function renderEventList(){
-    eventList.innerHTML = '';
-    // active events
-    Object.keys(activeEvents).forEach(ev=>{
-      const li = document.createElement('li');
-      li.textContent = `${activeEvents[ev].toFixed(3)} → (active) : ${ev}`;
-      const stop = document.createElement('button'); stop.textContent='Stop';
-      stop.addEventListener('click', ()=>{ video.currentTime = activeEvents[ev]; delete activeEvents[ev]; renderEventList(); saveAutosave(); });
-      li.appendChild(stop);
-      eventList.appendChild(li);
+    if(!eventTableBody) return;
+    eventTableBody.innerHTML = '';
+    // active events (show first)
+    Object.keys(activeEvents).forEach(evName=>{
+      const start = activeEvents[evName];
+      const tr = document.createElement('tr');
+      const tdEvent = document.createElement('td'); tdEvent.textContent = evName + ' (active)';
+      const tdStart = document.createElement('td'); tdStart.textContent = (typeof start==='number')? start.toFixed(3) : '—';
+      const tdStamp = document.createElement('td');
+      const link = document.createElement('a'); link.href = '#'; link.textContent = formatTimeSec(start);
+      link.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = start; video.pause(); }catch(e){} });
+      tdStamp.appendChild(link);
+      const tdDur = document.createElement('td'); tdDur.textContent = 'active';
+      const tdAct = document.createElement('td');
+      const stopBtn = document.createElement('button'); stopBtn.className = 'btn btn-sm btn-warning me-1'; stopBtn.textContent = 'Stop';
+      stopBtn.addEventListener('click', ()=>{ const e = +seconds().toFixed(3); eventTimeline.push({start: start, end: e, event: evName}); delete activeEvents[evName]; renderEventList(); saveAutosave(); });
+      const seekBtn = document.createElement('button'); seekBtn.className = 'btn btn-sm btn-secondary'; seekBtn.textContent = 'Seek';
+      seekBtn.addEventListener('click', ()=>{ try{ video.currentTime = start; video.pause(); }catch(e){} });
+      tdAct.appendChild(stopBtn); tdAct.appendChild(seekBtn);
+      tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
+      eventTableBody.appendChild(tr);
     });
     // finished events
     for(let i=0;i<eventTimeline.length;i++){
       const e = eventTimeline[i];
-      const li = document.createElement('li');
-      li.textContent = `${e.start.toFixed(3)} → ${e.end.toFixed(3)} : ${e.event}`;
-      const del = document.createElement('button'); del.textContent='Delete';
+      const tr = document.createElement('tr');
+      const tdEvent = document.createElement('td'); tdEvent.textContent = e.event;
+      const tdStart = document.createElement('td'); tdStart.textContent = (typeof e.start === 'number')? e.start.toFixed(3) : '—';
+      const tdStamp = document.createElement('td');
+      const link = document.createElement('a'); link.href='#'; link.textContent = formatTimeSec(e.start);
+      link.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = e.start; video.pause(); }catch(err){} });
+      tdStamp.appendChild(link);
+      const tdDur = document.createElement('td'); tdDur.textContent = ((typeof e.end==='number' && typeof e.start==='number')? (e.end - e.start).toFixed(3) : '—');
+      const tdAct = document.createElement('td');
+      const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
       del.addEventListener('click', ()=>{ eventTimeline.splice(i,1); renderEventList(); saveAutosave(); });
-      li.appendChild(del);
-      eventList.appendChild(li);
+      tdAct.appendChild(del);
+      tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
+      eventTableBody.appendChild(tr);
     }
   }
 
