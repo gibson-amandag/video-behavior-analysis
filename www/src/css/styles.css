@@ -1,0 +1,12 @@
+body{font-family: Arial, sans-serif; margin:20px;}
+.app{max-width:1000px;margin:0 auto}
+.controls label{display:inline-block;margin-right:12px}
+.player{margin-top:12px}
+.player video{max-width:100%;height:auto;background:#000}
+.player-buttons{margin-top:8px}
+.player-buttons button, .player-buttons select{margin-right:8px}
+.timelines{margin-top:16px}
+.timelines ul{list-style:none;padding-left:0}
+.timelines li{padding:6px 4px;border-bottom:1px solid #eee}
+.timelines button{margin-left:8px}
+.exports{margin-top:16px}

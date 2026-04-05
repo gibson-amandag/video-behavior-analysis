@@ -1,0 +1,11 @@
+task: open_field
+default_start: EDGE
+states:
+  - CENTER
+  - EDGE
+events:
+  - GROOMING
+  - REARING
+colors:
+  CENTER: '#ffeeaa'
+  EDGE: '#dddddd'
