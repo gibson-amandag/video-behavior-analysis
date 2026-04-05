@@ -76,6 +76,7 @@
     const message = `A duplicate state was detected around the inserted transition at ${formatTimeSec(current.start)}. Choose how to resolve:`;
     const choices = [
       {key:'M', label: 'Merge (remove future duplicate)'},
+      {key:'S', label: 'Add + swap future states'},
       {key:'I', label: 'Insert Complement (mark for review)'},
       {key:'D', label: 'Delete Future (remove later stamps)'}
     ];
@@ -102,6 +103,15 @@
       else if(choice === 'D'){
         // delete all future stamps after idx
         stateTimeline.splice(idx+1);
+      }
+      else if(choice === 'S'){
+        // flip all future states starting after the current insertion index
+        try{
+          for(let j = idx+1; j < stateTimeline.length; j++){
+            const s = stateTimeline[j];
+            if(s && typeof s.state === 'string') s.state = (s.state === 'EDGE'? 'CENTER' : 'EDGE');
+          }
+        }catch(e){ console.error('swap future error', e); }
       }
       // re-render and save
       renderStateList(); saveAutosave();
@@ -483,7 +493,34 @@
         tdAct.appendChild(edit); tdAct.appendChild(lock);
       } else {
         const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
-        del.addEventListener('click', ()=>{ stateTimeline.splice(i,1); renderStateList(); saveAutosave(); });
+        del.addEventListener('click', ()=>{
+          const idx = i;
+          // if last entry, allow quick single deletion
+          if(idx === stateTimeline.length - 1){
+            if(confirm('Delete this last state entry?')){
+              stateTimeline.splice(idx,1);
+              renderStateList(); saveAutosave();
+            }
+            return;
+          }
+          // intermediary entry: prompt user with options
+          const msg = `Delete state at ${formatTimeSec(stateTimeline[idx].start)} — choose action:`;
+          const choices = [
+            {key:'S', label: 'Delete selected + next'},
+            {key:'A', label: 'Delete all future entries (from here)'}
+          ];
+          showConflictModal(msg, choices, (choice)=>{
+            if(!choice) return;
+            if(choice === 'S'){
+              // remove this and the immediate next
+              stateTimeline.splice(idx, Math.min(2, stateTimeline.length - idx));
+            } else if(choice === 'A'){
+              // remove this and all following entries
+              stateTimeline.splice(idx);
+            }
+            renderStateList(); saveAutosave();
+          });
+        });
         tdAct.appendChild(edit); tdAct.appendChild(del);
       }
       tr.appendChild(tdState); tr.appendChild(tdAt); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
