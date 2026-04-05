@@ -48,6 +48,31 @@
     return `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}.${ms.toString().padStart(3,'0')}`;
   }
 
+  function parseTimeToSec(ts){
+    if(ts === null || ts === undefined) return NaN;
+    const s = String(ts).trim();
+    if(s === '') return NaN;
+    // If purely numeric, treat as seconds
+    if(/^\d+(\.\d+)?$/.test(s)) return parseFloat(s);
+    // Split on colons for HH:MM:SS.ms or MM:SS.ms
+    const parts = s.split(':').map(p=>p.trim()).filter(p=>p.length>0);
+    if(parts.length === 0) return NaN;
+    let seconds = 0;
+    try{
+      // right-most part is seconds (may include decimal)
+      let secPart = parts.pop();
+      seconds += parseFloat(secPart);
+      if(parts.length>0){ // minutes
+        const minPart = parts.pop(); seconds += parseFloat(minPart) * 60;
+      }
+      if(parts.length>0){ // hours
+        const hrPart = parts.pop(); seconds += parseFloat(hrPart) * 3600;
+      }
+      if(Number.isNaN(seconds)) return NaN;
+      return seconds;
+    }catch(e){ return NaN; }
+  }
+
   function renderSubjectIn(){
     let txt = `Subject in: ${subjectInTime!==null? formatTimeSec(subjectInTime): '—'}`;
     // if duration available, show computed session end time
@@ -274,9 +299,59 @@
       else if(dur !== null && subjectInTime !== null) durVal = (subjectInTime + dur) - a.start;
       tdDur.textContent = (durVal !== null && !Number.isNaN(durVal))? durVal.toFixed(3) : '—';
       const tdAct = document.createElement('td');
+      const edit = document.createElement('button'); edit.className = 'btn btn-sm btn-outline-secondary me-1'; edit.textContent='Edit';
+      edit.addEventListener('click', ()=>{
+        // Inline edit: replace timestamp cell with an input and Save/Cancel buttons
+        try{
+          // prevent multiple editors
+          if(tdStamp.querySelector('input')) return;
+          const current = (typeof a.start === 'number')? formatTimeSec(a.start) : '';
+          tdStamp.innerHTML = '';
+          const input = document.createElement('input');
+          input.type = 'text'; input.placeholder = 'MM:SS.ms or SS.ms'; input.value = current;
+          input.className = 'form-control form-control-sm';
+          input.style.width = '160px';
+          tdStamp.appendChild(input);
+
+          // modify action buttons to show Save / Cancel
+          tdAct.innerHTML = '';
+          const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-sm btn-primary me-1'; saveBtn.textContent = 'Save';
+          const currentBtn = document.createElement('button'); currentBtn.className = 'btn btn-sm btn-outline-primary me-1'; currentBtn.textContent = 'Now';
+          const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-sm btn-secondary'; cancelBtn.textContent = 'Cancel';
+          tdAct.appendChild(currentBtn); tdAct.appendChild(saveBtn); tdAct.appendChild(cancelBtn);
+
+          const finish = ()=>{ renderStateList(); };
+
+          saveBtn.addEventListener('click', ()=>{
+            const val = parseTimeToSec(input.value);
+            if(Number.isNaN(val)){ alert('Invalid timestamp format; use MM:SS.ms or seconds'); return; }
+            // bounds: previous start (or subjectInTime or 0) <= val < next start (or session end or Infinity)
+            const prev = (i>0 && typeof stateTimeline[i-1].start === 'number') ? stateTimeline[i-1].start : (subjectInTime!==null? subjectInTime : 0);
+            let nextBound = null;
+            if(stateTimeline[i+1] && typeof stateTimeline[i+1].start === 'number') nextBound = stateTimeline[i+1].start;
+            else if(videoDurInput && videoDurInput.value && subjectInTime !== null){ const pd = parseFloat(videoDurInput.value); if(!Number.isNaN(pd)) nextBound = subjectInTime + pd; }
+            if(val < prev - 1e-6){ alert(`New time must be >= ${prev.toFixed(3)} s`); return; }
+            if(nextBound !== null && val >= nextBound - 1e-6){ alert(`New time must be < ${nextBound.toFixed(3)} s`); return; }
+            stateTimeline[i].start = +val.toFixed(3);
+            // keep timeline ordered
+            stateTimeline.sort((x,y)=> x.start - y.start);
+            saveAutosave();
+            finish();
+          });
+
+          currentBtn.addEventListener('click', ()=>{
+            try{ input.value = formatTimeSec(seconds()); input.focus(); input.select(); }catch(e){}
+          });
+
+          cancelBtn.addEventListener('click', ()=>{ finish(); });
+
+          // focus input
+          input.focus(); input.select();
+        }catch(err){ console.error('edit handler error', err); }
+      });
       const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
       del.addEventListener('click', ()=>{ stateTimeline.splice(i,1); renderStateList(); saveAutosave(); });
-      tdAct.appendChild(del);
+      tdAct.appendChild(edit); tdAct.appendChild(del);
       tr.appendChild(tdState); tr.appendChild(tdAt); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
       stateTableBody.appendChild(tr);
     }
