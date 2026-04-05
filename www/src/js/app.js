@@ -9,6 +9,7 @@
   let activeEvents = {}; // eventName -> startTime
   let subjectInTime = null; // seconds when subject placed in apparatus
   let savedAutosave = null; // raw autosave stash (do not auto-apply)
+  let manualFlags = [];
 
   // DOM
   const videoFile = document.getElementById('videoFile');
@@ -20,6 +21,7 @@
   const markInBtn = document.getElementById('markIn');
   const clearInBtn = document.getElementById('clearIn');
   const subjectInDisplay = document.getElementById('subjectInDisplay');
+  const currentStateDisplay = document.getElementById('currentStateDisplay');
   const videoDurInput = document.getElementById('videoDur');
   const stepInput = document.getElementById('stepSize');
   const addStateBtn = document.getElementById('addState');
@@ -36,6 +38,75 @@
   const startStateSel = document.getElementById('startState');
 
   function seconds(){ return video.currentTime || 0; }
+
+  function sessionEnd(){
+    if(subjectInTime === null) return Infinity;
+    const pd = (videoDurInput && videoDurInput.value) ? parseFloat(videoDurInput.value) : 600;
+    return subjectInTime + (Number.isNaN(pd)? 600 : pd);
+  }
+
+  function showConflictModal(message, choices, cb){
+    // small in-page modal with buttons for choices array [{key:'M',label:'Merge'}]
+    try{
+      const overlay = document.createElement('div');
+      overlay.style.position = 'fixed'; overlay.style.left = 0; overlay.style.top = 0; overlay.style.right = 0; overlay.style.bottom = 0;
+      overlay.style.background = 'rgba(0,0,0,0.4)'; overlay.style.zIndex = 99998; overlay.style.display = 'flex'; overlay.style.alignItems='center'; overlay.style.justifyContent='center';
+      const box = document.createElement('div'); box.style.background='white'; box.style.padding='16px'; box.style.borderRadius='8px'; box.style.maxWidth='480px'; box.style.width='90%';
+      const p = document.createElement('div'); p.textContent = message; p.style.marginBottom = '12px';
+      box.appendChild(p);
+      const btnRow = document.createElement('div'); btnRow.style.display='flex'; btnRow.style.gap='8px';
+      choices.forEach(ch=>{
+        const b = document.createElement('button'); b.className = 'btn btn-sm btn-primary'; b.textContent = ch.label;
+        b.addEventListener('click', ()=>{ try{ overlay.remove(); cb(ch.key); }catch(e){} });
+        btnRow.appendChild(b);
+      });
+      const cancel = document.createElement('button'); cancel.className = 'btn btn-sm btn-secondary ms-2'; cancel.textContent = 'Cancel';
+      cancel.addEventListener('click', ()=>{ try{ overlay.remove(); cb(null); }catch(e){} });
+      box.appendChild(btnRow); box.appendChild(cancel);
+      overlay.appendChild(box); document.body.appendChild(overlay);
+    }catch(e){ cb(null); }
+  }
+
+  function handleConflict(idx){
+    // pause video
+    try{ video.pause(); }catch(e){}
+    const current = stateTimeline[idx];
+    const prev = (idx>0)? stateTimeline[idx-1]: null;
+    const next = (idx+1 < stateTimeline.length)? stateTimeline[idx+1]: null;
+    const message = `A duplicate state was detected around the inserted transition at ${formatTimeSec(current.start)}. Choose how to resolve:`;
+    const choices = [
+      {key:'M', label: 'Merge (remove future duplicate)'},
+      {key:'I', label: 'Insert Complement (mark for review)'},
+      {key:'D', label: 'Delete Future (remove later stamps)'}
+    ];
+    showConflictModal(message, choices, (choice)=>{
+      if(!choice) return; // cancelled
+      if(choice === 'M'){
+        // remove future duplicate (prefer next)
+        if(next && next.state === current.state){ stateTimeline.splice(idx+1, 1); }
+        else if(prev && prev.state === current.state){ // fallback: remove current
+          stateTimeline.splice(idx,1);
+        }
+      }
+      else if(choice === 'I'){
+        // insert complementary state between current and next
+        const comp = current.state === 'EDGE' ? 'CENTER' : 'EDGE';
+        let nextStart = sessionEnd();
+        if(next && typeof next.start === 'number') nextStart = next.start;
+        let mid = current.start + Math.min(0.5, Math.max(0.001, (nextStart - current.start)/2));
+        if(mid <= current.start) mid = current.start + 0.001;
+        const newEntry = {start: +mid.toFixed(3), state: comp, manual_flag: 'complementary'};
+        stateTimeline.splice(idx+1, 0, newEntry);
+        manualFlags.push({type:'complementary', at_s: newEntry.start, note: 'Inserted complementary placeholder'});
+      }
+      else if(choice === 'D'){
+        // delete all future stamps after idx
+        stateTimeline.splice(idx+1);
+      }
+      // re-render and save
+      renderStateList(); saveAutosave();
+    });
+  }
 
   function formatTimeSec(t){
     if(t === null || t === undefined || Number.isNaN(t)) return '—';
@@ -80,6 +151,30 @@
     if(videoDurInput && videoDurInput.value){ const p = parseFloat(videoDurInput.value); if(!Number.isNaN(p)) dur = p; }
     if(subjectInTime !== null && dur !== null){ const endt = subjectInTime + dur; txt += ` — session end: ${formatTimeSec(endt)}`; }
     subjectInDisplay.textContent = txt;
+  }
+
+  function getStateAt(time){
+    if(typeof time !== 'number' || stateTimeline.length === 0) return null;
+    // return the last state with start <= time
+    let picked = null;
+    for(let i=0;i<stateTimeline.length;i++){
+      const s = stateTimeline[i];
+      if(typeof s.start === 'number' && s.start <= time + 1e-9) picked = s;
+      else if(typeof s.start === 'number' && s.start > time) break;
+    }
+    return picked;
+  }
+
+  function updateCurrentStateDisplay(){
+    if(!currentStateDisplay) return;
+    try{
+      const now = (video && typeof video.currentTime === 'number') ? video.currentTime : null;
+      if(now === null || subjectInTime === null || now < subjectInTime - 1e-6){ currentStateDisplay.textContent = 'Current state: —'; return; }
+      const s = getStateAt(now);
+      if(!s){ currentStateDisplay.textContent = 'Current state: —'; return; }
+      // show state and when it started (relative seconds)
+      currentStateDisplay.textContent = `Current state: ${s.state} (since ${formatTimeSec(s.start)})`;
+    }catch(e){ currentStateDisplay.textContent = 'Current state: —'; }
   }
 
   videoFile.addEventListener('change', (e)=>{
@@ -250,12 +345,23 @@
     const t = +seconds().toFixed(3);
     // prevent adding transitions before subject placement
     if(t < subjectInTime){ alert('State transitions must occur at or after subject placement time.'); return; }
-    // toggle to other state if same as last
-    const last = stateTimeline[stateTimeline.length-1];
-    const nextState = last && last.state === 'EDGE' ? 'CENTER' : 'EDGE';
-    stateTimeline.push({start: t, state: nextState});
-    renderStateList();
-    saveAutosave();
+    // determine insertion index by time
+    let insertIdx = stateTimeline.findIndex(s=> (typeof s.start==='number' && s.start > t));
+    if(insertIdx === -1) insertIdx = stateTimeline.length;
+    // determine prev state at this time
+    const prevState = (insertIdx>0 && stateTimeline[insertIdx-1])? stateTimeline[insertIdx-1].state : (stateTimeline.length>0? stateTimeline[0].state : 'EDGE');
+    const nextStateVal = (insertIdx < stateTimeline.length && stateTimeline[insertIdx])? stateTimeline[insertIdx].state : null;
+    const newState = prevState === 'EDGE' ? 'CENTER' : 'EDGE';
+    // validate within session end
+    const end = sessionEnd();
+    if(t > end + 1e-6){ alert('New time is after configured session end; adjust duration or choose a different time.'); return; }
+    // insert
+    stateTimeline.splice(insertIdx, 0, {start: +t.toFixed(3), state: newState});
+    // check for duplicate adjacent states
+    const conflictPrev = (insertIdx>0 && stateTimeline[insertIdx-1] && stateTimeline[insertIdx-1].state === newState);
+    const conflictNext = (insertIdx+1 < stateTimeline.length && stateTimeline[insertIdx+1] && stateTimeline[insertIdx+1].state === newState);
+    if(conflictPrev || conflictNext){ handleConflict(insertIdx); }
+    renderStateList(); saveAutosave();
   });
 
   startEventBtn.addEventListener('click', ()=>{
@@ -285,8 +391,11 @@
     if(videoDurInput && videoDurInput.value){ const p = parseFloat(videoDurInput.value); if(!Number.isNaN(p)) dur = p; }
     for(let i=0;i<stateTimeline.length;i++){
       const a = stateTimeline[i];
+      // mark complementary rows visually
+      const isComplement = a && a.manual_flag === 'complementary';
       const b = stateTimeline[i+1];
       const tr = document.createElement('tr');
+      if(isComplement){ tr.className = 'table-warning'; }
       const tdState = document.createElement('td'); tdState.textContent = a.state;
       const tdAt = document.createElement('td'); tdAt.textContent = (typeof a.start === 'number')? a.start.toFixed(3) : '—';
       const tdStamp = document.createElement('td');
@@ -338,7 +447,24 @@
             if(wasInitial){ subjectInTime = stateTimeline[i].start; renderSubjectIn(); }
             // keep timeline ordered
             stateTimeline.sort((x,y)=> x.start - y.start);
+            // find new index of edited entry
+            const editedStart = +val.toFixed(3);
+            let newIdx = stateTimeline.findIndex(s=> (typeof s.start==='number' && Math.abs(s.start - editedStart) < 1e-6 && s.state === a.state));
+            if(newIdx === -1){ newIdx = stateTimeline.findIndex(s=> (typeof s.start==='number' && Math.abs(s.start - editedStart) < 1e-6)); }
             saveAutosave();
+            if(newIdx !== -1){
+              // If this edited entry was previously marked as a complementary manual insert,
+              // clear the flag and remove its record from manualFlags now that user edited it.
+              try{
+                if(stateTimeline[newIdx] && stateTimeline[newIdx].manual_flag === 'complementary'){
+                  delete stateTimeline[newIdx].manual_flag;
+                  manualFlags = manualFlags.filter(f=> !(f.type === 'complementary' && typeof f.at_s === 'number' && Math.abs(f.at_s - stateTimeline[newIdx].start) < 1e-6));
+                }
+              }catch(e){}
+              const conflictPrev = (newIdx>0 && stateTimeline[newIdx-1] && stateTimeline[newIdx-1].state === stateTimeline[newIdx].state);
+              const conflictNext = (newIdx+1 < stateTimeline.length && stateTimeline[newIdx+1] && stateTimeline[newIdx+1].state === stateTimeline[newIdx].state);
+              if(conflictPrev || conflictNext){ handleConflict(newIdx); return; }
+            }
             finish();
           });
 
@@ -363,6 +489,8 @@
       tr.appendChild(tdState); tr.appendChild(tdAt); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
       stateTableBody.appendChild(tr);
     }
+    // update current state display whenever timeline re-renders
+    try{ updateCurrentStateDisplay(); }catch(e){}
   }
 
   function renderEventList(){
@@ -472,7 +600,7 @@
       task: 'open_field',
       duration_s: duration,
       subject: {species:'rat', id: document.getElementById('subjectId').value || ''},
-      metadata: { video_file: video.dataset.filename||'', date: document.getElementById('date').value||'', time: document.getElementById('time').value||'', scorer: document.getElementById('scorer').value||'', comments: '' , subject_placed_at_s: subjectInTime, session_end_s: session_end, session_end_note: session_end !== null ? `Computed end = ${formatTimeSec(session_end)} (${session_end.toFixed(3)} s)` : ''},
+      metadata: { video_file: video.dataset.filename||'', date: document.getElementById('date').value||'', time: document.getElementById('time').value||'', scorer: document.getElementById('scorer').value||'', comments: '' , subject_placed_at_s: subjectInTime, session_end_s: session_end, session_end_note: session_end !== null ? `Computed end = ${formatTimeSec(session_end)} (${session_end.toFixed(3)} s)` : '', manual_flags: manualFlags.slice()},
       state_timeline: states,
       event_timeline: eventTimeline.slice(),
       tool_version: TOOL_VERSION,
@@ -493,7 +621,7 @@
   const AS_KEY = 'oft_scoring_autosave_v0';
   function saveAutosave(){
     const vidDur = (videoDurInput && videoDurInput.value) ? parseFloat(videoDurInput.value) : 600;
-    const state = {stateTimeline, eventTimeline, activeEvents, metadata:{scorer:document.getElementById('scorer').value, subjectId:document.getElementById('subjectId').value, subject_in_time_s: subjectInTime, video_duration_s: vidDur, video_file: video.dataset.filename || (videoFile && videoFile.files && videoFile.files[0] && videoFile.files[0].name) || ''}};
+    const state = {stateTimeline, eventTimeline, activeEvents, metadata:{scorer:document.getElementById('scorer').value, subjectId:document.getElementById('subjectId').value, subject_in_time_s: subjectInTime, video_duration_s: vidDur, video_file: video.dataset.filename || (videoFile && videoFile.files && videoFile.files[0] && videoFile.files[0].name) || '', manual_flags: manualFlags.slice()}};
     try{ localStorage.setItem(AS_KEY, JSON.stringify(state)); savedAutosave = state; }catch(e){}
   }
   function loadAutosave(){
@@ -570,6 +698,9 @@
   // init
   loadAutosave();
   loadConfig();
+
+  // update current state as video plays/seeks
+  try{ video.addEventListener('timeupdate', updateCurrentStateDisplay); }catch(e){}
 
   // expose for debugging
   window._oft = {stateTimeline, eventTimeline, buildOutput};
