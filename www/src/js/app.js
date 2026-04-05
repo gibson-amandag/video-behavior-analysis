@@ -80,21 +80,30 @@
   // Mark subject in / clear
   if(markInBtn){ markInBtn.addEventListener('click', ()=>{
     subjectInTime = +seconds().toFixed(3);
-    renderSubjectIn();
+    // initialize state timeline to start at the subject placement time
+    try{
+      const startState = (startStateSel && startStateSel.value) ? startStateSel.value : 'EDGE';
+      stateTimeline = [{start: subjectInTime, state: startState}];
+    }catch(e){ stateTimeline = [{start: subjectInTime, state: 'EDGE'}]; }
+    renderSubjectIn(); renderStateList();
     saveAutosave();
   }); }
   if(clearInBtn){ clearInBtn.addEventListener('click', ()=>{
     subjectInTime = null;
-    renderSubjectIn();
+    // clear state timeline because timeline must begin at subject placement
+    stateTimeline = [];
+    renderSubjectIn(); renderStateList();
     saveAutosave();
   }); }
 
-  setStartStateBtn.addEventListener('click', ()=>{
-    const s = startStateSel.value;
-    stateTimeline = [{start:0, state: s}];
-    renderStateList();
-    saveAutosave();
-  });
+  if(setStartStateBtn){
+    setStartStateBtn.addEventListener('click', ()=>{
+      const s = startStateSel.value;
+      stateTimeline = [{start:0, state: s}];
+      renderStateList();
+      saveAutosave();
+    });
+  }
 
   // playback speed control
   if(changeSpeed){
@@ -173,7 +182,7 @@
     if(e.key === 'r'){ toggleEventByName('REARING'); }
 
     // state switch
-    if(e.key === 'j'){ if(addStateBtn) addStateBtn.click(); }
+    if(e.key === 'v'){ if(addStateBtn) addStateBtn.click(); }
   });
 
   // helper: toggle named event start/stop
@@ -194,7 +203,10 @@
   }
 
   addStateBtn.addEventListener('click', ()=>{
+    if(subjectInTime === null){ alert('Please mark subject start time before adding state transitions.'); return; }
     const t = +seconds().toFixed(3);
+    // prevent adding transitions before subject placement
+    if(t < subjectInTime){ alert('State transitions must occur at or after subject placement time.'); return; }
     // toggle to other state if same as last
     const last = stateTimeline[stateTimeline.length-1];
     const nextState = last && last.state === 'EDGE' ? 'CENTER' : 'EDGE';
@@ -224,12 +236,17 @@
 
   function renderStateList(){
     stateList.innerHTML = '';
-    const dur = video.duration || null;
+    // compute session duration end time (subjectInTime + duration)
+    let dur = null;
+    if(videoDurInput && videoDurInput.value){ const p = parseFloat(videoDurInput.value); if(!Number.isNaN(p)) dur = p; }
     for(let i=0;i<stateTimeline.length;i++){
       const a = stateTimeline[i];
       const b = stateTimeline[i+1];
       const li = document.createElement('li');
-      li.textContent = `${a.start.toFixed(3)} → ${b ? b.start.toFixed(3) : (dur?dur.toFixed(3):'ONGOING')} : ${a.state}`;
+      let endTxt = 'ONGOING';
+      if(b){ endTxt = b.start.toFixed(3); }
+      else if(dur !== null && subjectInTime !== null){ endTxt = (subjectInTime + dur).toFixed(3); }
+      li.textContent = `${a.start.toFixed(3)} → ${endTxt} : ${a.state}`;
       const del = document.createElement('button'); del.textContent='Delete';
       del.addEventListener('click', ()=>{ stateTimeline.splice(i,1); renderStateList(); saveAutosave(); });
       li.appendChild(del);

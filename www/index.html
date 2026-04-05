@@ -55,30 +55,11 @@
             <input id="changeSpeed" class="form-control text-center" type="number" min="0.25" max="8" step="0.25" value="1.0" />
             <button id="speedInc" class="btn btn-outline-secondary">+</button>
           </div>
-          <div class="form-text">
-            Keys:
-            <ul class="mb-0">
-              <li><strong>Events:</strong> g = start/stop GROOMING, r = start/stop REARING</li>
-              <li><strong>State:</strong> j = add state transition (switch state)</li>
-            </ul>
-          </div>
-          <div class="mt-2">
-            <label class="form-label">Step size (s)</label>
-            <input id="stepSize" class="form-control form-control-sm" type="number" min="0.001" max="5" step="0.1" value="0.2" />
-            <div class="form-text">Use left/right arrows to step by this many seconds; hold Shift for ±1s jump</div>
-          </div>
         </div>
-        <div class="col-8">
-          <p>Keys to control playback:</p>
-          <ul>
-            <li><strong>Playback speed:</strong>
-              <ul>
-                <li><kbd>q</kbd>=0.5x, <kbd>w</kbd>=1x, <kbd>a</kbd>=2x, <kbd>s</kbd>=3x</li>
-                <li><kbd>↑</kbd> / <kbd>↓</kbd> to increase / decrease speed by the speed step</li>
-              </ul>
-            <li><strong>Step through:</strong> <kbd>←</kbd> / <kbd>→</kbd> to step by Step size; hold Shift for ±1s jump</li>
-            <li><strong>Seek / play:</strong> <kbd>z</kbd> = back 10s, <kbd>x</kbd> = play/pause, <kbd>c</kbd> = forward 10s</li>
-          </ul>
+        <div class="col-md-4">
+          <label class="form-label">Step size (s)</label>
+          <input id="stepSize" class="form-control form-control-sm" type="number" min="0.001" max="5" step="0.1" value="0.2" />
+          <div class="form-text">Use left/right arrows to step by this many seconds; hold Shift for ±1s jump</div>
         </div>
         <div class="col-md-8 align-self-end">
           <!-- reserved for future scoring controls -->
@@ -93,7 +74,6 @@
               <option value="EDGE">Edge</option>
               <option value="CENTER">Center</option>
             </select>
-            <button id="setStartState" class="btn btn-sm btn-secondary col-12">Set Start</button>
           </div>
         </div>
         <div class="col-md-4">
@@ -111,19 +91,55 @@
           <div class="form-text">Default 600s. Enter session duration in seconds (do not auto-fill from video).</div>
         </div>
       </div>
+      <div class="player-buttons">
+        <div class="row">
+          <div class="col-4">
+            <button id="addState" class="btn btn-primary me-2">Add State Transition</button>
+          </div>
+          <div class="col-8">
+            <div class="row">
+              <button id="startEvent" class="btn btn-success me-2 col-4">Start Event</button>
+              <select id="eventType" class="form-select form-select-sm d-inline-block me-2 col-4" style="width:auto;">
+                <option>GROOMING</option>
+                <option>REARING</option>
+              </select>
+              <button id="stopEvent" class="btn btn-warning col-4">Stop Event</button>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+      <div class="row mt-3">
+        <h3 class="col-12">
+          Keystrokes:
+        </h3>
+        <div class="col-4">
+          <ul class="mb-0">
+            <li><strong>Events:</strong> <kbd>g</kbd> = start/stop GROOMING, <kbd>r</kbd> = start/stop REARING</li>
+            <li><strong>State:</strong> <kbd>v</kbd> = add state transition (switch state)</li>
+          </ul>
+        </div>
+        <div class="col-4">
+          <ul>
+            <li><strong>Playback speed:</strong>
+              <ul>
+                <li><kbd>q</kbd>=0.5x, <kbd>w</kbd>=1x, <kbd>a</kbd>=2x, <kbd>s</kbd>=3x</li>
+                <li><kbd>↑</kbd> / <kbd>↓</kbd> to increase / decrease speed by 0.25x</li>
+              </ul>
+            </ul>
+          </div>
+          <div class="col-4">
+            <ul>
+              <li><strong>Step through:</strong> <kbd>←</kbd> / <kbd>→</kbd> to step by Step size; hold Shift for ±1s jump</li>
+              <li><strong>Seek / play:</strong> <kbd>z</kbd> = back 10s, <kbd>x</kbd> = play/pause, <kbd>c</kbd> = forward 10s</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section class="player">
       <video id="videoPlayer" controls class="w-100" style="max-height:480px"></video>
-      <div class="player-buttons mt-2">
-        <button id="addState" class="btn btn-primary btn-sm me-2">Add State Transition</button>
-        <button id="startEvent" class="btn btn-success btn-sm me-2">Start Event</button>
-        <select id="eventType" class="form-select form-select-sm d-inline-block me-2" style="width:auto;">
-          <option>GROOMING</option>
-          <option>REARING</option>
-        </select>
-        <button id="stopEvent" class="btn btn-warning btn-sm">Stop Event</button>
-      </div>
     </section>
 
     <section class="timelines">
