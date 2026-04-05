@@ -176,6 +176,24 @@
       if(video.paused) video.play(); else video.pause();
       e.preventDefault();
     }
+    // mark subject in
+    if(e.key && e.key.toLowerCase() === 'p'){
+      if(markInBtn) markInBtn.click();
+      e.preventDefault();
+    }
+    // go back to last marked state transition
+    if(e.key && e.key.toLowerCase() === 'b'){
+      const now = (video.currentTime || 0);
+      try{
+        const starts = stateTimeline.map(s=>s.start).filter(t=>typeof t === 'number' && t < now - 0.001).sort((a,b)=>a-b);
+        let target = null;
+        if(starts.length>0) target = starts[starts.length-1];
+        else if(subjectInTime !== null) target = subjectInTime;
+        if(target !== null){ video.currentTime = Math.max(0, target); video.pause(); }
+        else { alert('No previous state transition available'); }
+      }catch(e){ console.error('seek to last state error', e); }
+      e.preventDefault();
+    }
 
     // events: toggle grooming / rearing
     if(e.key === 'g'){ toggleEventByName('GROOMING'); }
