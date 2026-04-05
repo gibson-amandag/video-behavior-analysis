@@ -1,0 +1,136 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/gibson-lab-regis/video-behavior-analysis/schemas/scoring_schema.json",
+  "title": "BehavioralScoringOutput",
+  "description": "Schema for scoring tool output files. Defines the contract between scoring tools and analysis code.",
+  "type": "object",
+  "required": [
+    "session_id",
+    "task",
+    "duration_s",
+    "subject",
+    "metadata",
+    "state_timeline",
+    "event_timeline",
+    "tool_version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "Unique identifier for the session, e.g. 'Rat12_OFT_2026-03-05'."
+    },
+    "task": {
+      "type": "string",
+      "description": "Behavioral paradigm identifier, e.g. 'open_field', 'elevated_plus_maze', 'light_dark_box'.",
+      "enum": ["open_field", "elevated_plus_maze", "light_dark_box"]
+    },
+    "duration_s": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Total session duration in seconds."
+    },
+    "subject": {
+      "type": "object",
+      "required": ["species", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "species": {
+          "type": "string",
+          "description": "Animal species, e.g. 'rat' or 'mouse'."
+        },
+        "id": {
+          "type": "string",
+          "description": "Subject identifier within the study."
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["video_file", "date", "scorer"],
+      "additionalProperties": false,
+      "properties": {
+        "video_file": {
+          "type": "string",
+          "description": "Filename of the source video (no path)."
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Session date in ISO 8601 format (YYYY-MM-DD)."
+        },
+        "time": {
+          "type": "string",
+          "pattern": "^[0-9]{2}:[0-9]{2}$",
+          "description": "Session start time (HH:MM, 24-hour)."
+        },
+        "scorer": {
+          "type": "string",
+          "description": "Identifier for the person who scored the session."
+        },
+        "comments": {
+          "type": "string",
+          "description": "Optional free-text notes about the session."
+        }
+      }
+    },
+    "state_timeline": {
+      "type": "array",
+      "description": "Ordered list of mutually exclusive states covering the full session duration.",
+      "items": {
+        "type": "object",
+        "required": ["start", "end", "state"],
+        "additionalProperties": false,
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0,
+            "description": "State start time in seconds from session onset."
+          },
+          "end": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "State end time in seconds from session onset."
+          },
+          "state": {
+            "type": "string",
+            "description": "State label (task-specific), e.g. 'CENTER', 'EDGE', 'OPEN_ARM'."
+          }
+        }
+      }
+    },
+    "event_timeline": {
+      "type": "array",
+      "description": "List of discrete behavioral events. Events may overlap each other and states.",
+      "items": {
+        "type": "object",
+        "required": ["start", "end", "event"],
+        "additionalProperties": false,
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0,
+            "description": "Event start time in seconds from session onset."
+          },
+          "end": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Event end time in seconds from session onset."
+          },
+          "event": {
+            "type": "string",
+            "description": "Event label, e.g. 'GROOMING', 'REARING', 'HEAD_DIP'."
+          }
+        }
+      }
+    },
+    "tool_version": {
+      "type": "string",
+      "description": "Semantic version string of the scoring tool that produced this file, e.g. '1.0.0'."
+    },
+    "task_config": {
+      "type": "string",
+      "description": "Optional filename of the task configuration used by the scoring tool."
+    }
+  }
+}

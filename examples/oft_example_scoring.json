@@ -1,0 +1,40 @@
+{
+  "session_id": "Rat12_OFT_2026-03-05",
+  "task": "open_field",
+  "duration_s": 600,
+  "subject": {
+    "species": "rat",
+    "id": "12"
+  },
+  "metadata": {
+    "video_file": "Rat12_OFT.mp4",
+    "date": "2026-03-05",
+    "time": "14:30",
+    "scorer": "RA_Jane",
+    "comments": ""
+  },
+  "state_timeline": [
+    { "start": 0,   "end": 60,  "state": "EDGE"   },
+    { "start": 60,  "end": 80,  "state": "CENTER"  },
+    { "start": 80,  "end": 110, "state": "EDGE"    },
+    { "start": 110, "end": 150, "state": "CENTER"  },
+    { "start": 150, "end": 240, "state": "EDGE"    },
+    { "start": 240, "end": 260, "state": "CENTER"  },
+    { "start": 260, "end": 360, "state": "EDGE"    },
+    { "start": 360, "end": 375, "state": "CENTER"  },
+    { "start": 375, "end": 480, "state": "EDGE"    },
+    { "start": 480, "end": 500, "state": "CENTER"  },
+    { "start": 500, "end": 600, "state": "EDGE"    }
+  ],
+  "event_timeline": [
+    { "start": 75,  "end": 90,  "event": "GROOMING" },
+    { "start": 140, "end": 145, "event": "REARING"  },
+    { "start": 155, "end": 162, "event": "GROOMING" },
+    { "start": 245, "end": 248, "event": "REARING"  },
+    { "start": 310, "end": 325, "event": "GROOMING" },
+    { "start": 365, "end": 368, "event": "REARING"  },
+    { "start": 490, "end": 498, "event": "GROOMING" }
+  ],
+  "tool_version": "1.0.0",
+  "task_config": "oft.yaml"
+}
