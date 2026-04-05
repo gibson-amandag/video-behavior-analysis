@@ -300,6 +300,7 @@
       tdDur.textContent = (durVal !== null && !Number.isNaN(durVal))? durVal.toFixed(3) : '—';
       const tdAct = document.createElement('td');
       const edit = document.createElement('button'); edit.className = 'btn btn-sm btn-outline-secondary me-1'; edit.textContent='Edit';
+      const isInitialPlacement = (i === 0 && subjectInTime !== null && Math.abs((a.start||0) - subjectInTime) < 1e-6);
       edit.addEventListener('click', ()=>{
         // Inline edit: replace timestamp cell with an input and Save/Cancel buttons
         try{
@@ -322,6 +323,7 @@
 
           const finish = ()=>{ renderStateList(); };
 
+          const wasInitial = isInitialPlacement;
           saveBtn.addEventListener('click', ()=>{
             const val = parseTimeToSec(input.value);
             if(Number.isNaN(val)){ alert('Invalid timestamp format; use MM:SS.ms or seconds'); return; }
@@ -333,6 +335,7 @@
             if(val < prev - 1e-6){ alert(`New time must be >= ${prev.toFixed(3)} s`); return; }
             if(nextBound !== null && val >= nextBound - 1e-6){ alert(`New time must be < ${nextBound.toFixed(3)} s`); return; }
             stateTimeline[i].start = +val.toFixed(3);
+            if(wasInitial){ subjectInTime = stateTimeline[i].start; renderSubjectIn(); }
             // keep timeline ordered
             stateTimeline.sort((x,y)=> x.start - y.start);
             saveAutosave();
@@ -349,9 +352,14 @@
           input.focus(); input.select();
         }catch(err){ console.error('edit handler error', err); }
       });
-      const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
-      del.addEventListener('click', ()=>{ stateTimeline.splice(i,1); renderStateList(); saveAutosave(); });
-      tdAct.appendChild(edit); tdAct.appendChild(del);
+      if(isInitialPlacement){
+        const lock = document.createElement('span'); lock.className = 'badge bg-secondary'; lock.textContent = 'Locked';
+        tdAct.appendChild(edit); tdAct.appendChild(lock);
+      } else {
+        const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
+        del.addEventListener('click', ()=>{ stateTimeline.splice(i,1); renderStateList(); saveAutosave(); });
+        tdAct.appendChild(edit); tdAct.appendChild(del);
+      }
       tr.appendChild(tdState); tr.appendChild(tdAt); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
       stateTableBody.appendChild(tr);
     }
