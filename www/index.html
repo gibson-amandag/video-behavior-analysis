@@ -18,6 +18,9 @@
           <label class="form-label">Video file</label>
           <input id="videoFile" class="form-control form-control-sm" type="file" accept="video/*" />
         </div>
+        <div class="col-md-12">
+          <div id="videoFileDisplay" class="small text-muted mt-1">File: —</div>
+        </div>
       </div>
       <div class="row">
         <h3 class="col-12">Testing Information</h3>
@@ -85,7 +88,7 @@
         <h3 class="col-12">Behavioral Information</h3>
         <div class="col-md-4">
           <label class="form-label">Starting state</label>
-          <div class="row">
+          <div class="">
             <select id="startState" class="form-select form-select-sm me-2 col-12">
               <option value="EDGE">Edge</option>
               <option value="CENTER">Center</option>
@@ -95,7 +98,7 @@
         </div>
         <div class="col-md-4">
           Start Time
-          <div class="mt-2 row">
+          <div class="mt-2">
               <button id="markIn" class="btn btn-outline-primary btn-sm me-2 col-12">Mark subject start time</button>
               <button id="clearIn" class="btn btn-outline-secondary btn-sm me-3 col-12">Clear</button>
               <div id="subjectInDisplay" class="text-muted col-12">Subject placed: —</div>
@@ -134,6 +137,10 @@
     <section class="exports mt-3">
       <button id="exportJson" class="btn btn-outline-primary btn-sm me-2">Export JSON</button>
       <button id="exportCsv" class="btn btn-outline-secondary btn-sm me-2">Export CSV</button>
+      <label class="btn btn-outline-info btn-sm me-2 mb-0">
+        Import JSON
+        <input id="importJsonFile" type="file" accept="application/json" style="display:none" />
+      </label>
       <button id="clearAll" class="btn btn-danger btn-sm">Clear All</button>
     </section>
   </div>

@@ -8,10 +8,12 @@
   let eventTimeline = []; // entries: {start, end, event}
   let activeEvents = {}; // eventName -> startTime
   let subjectInTime = null; // seconds when subject placed in apparatus
+  let savedAutosave = null; // raw autosave stash (do not auto-apply)
 
   // DOM
   const videoFile = document.getElementById('videoFile');
   const video = document.getElementById('videoPlayer');
+  const videoFileDisplay = document.getElementById('videoFileDisplay');
   const changeSpeed = document.getElementById('changeSpeed');
   const speedInc = document.getElementById('speedInc');
   const speedDec = document.getElementById('speedDec');
@@ -29,6 +31,7 @@
   const exportJsonBtn = document.getElementById('exportJson');
   const exportCsvBtn = document.getElementById('exportCsv');
   const clearAllBtn = document.getElementById('clearAll');
+  const importJsonFile = document.getElementById('importJsonFile');
   const setStartStateBtn = document.getElementById('setStartState');
   const startStateSel = document.getElementById('startState');
 
@@ -59,9 +62,17 @@
     if(!f) return;
     video.src = URL.createObjectURL(f);
     video.dataset.filename = f.name;
+    if(videoFileDisplay) videoFileDisplay.textContent = `File: ${f.name}`;
     // apply selected playback speed when loading a file
     const sp = parseFloat(changeSpeed && changeSpeed.value) || 1.0;
     video.playbackRate = sp;
+    // If there's a saved autosave that matches this video's filename, offer to restore it as a backup.
+    try{
+      if(savedAutosave && savedAutosave.metadata && savedAutosave.metadata.video_file && savedAutosave.metadata.video_file === f.name){
+        const ok = confirm('Found a local autosave for this video. Restore annotations from local backup?');
+        if(ok) applyAutosave(savedAutosave);
+      }
+    }catch(e){}
   });
 
   // Do NOT auto-fill duration from video; default is provided in the form (600s)
@@ -90,7 +101,7 @@
     changeSpeed.addEventListener('input', ()=>{
       const v = parseFloat(changeSpeed.value) || 1.0;
       video.playbackRate = v;
-      saveAutosave();
+      // do not persist transient playback preferences as part of autosave
     });
   }
 
@@ -102,7 +113,6 @@
     let nv = Math.min(max, Math.max(min, Math.round(v/step)*step));
     changeSpeed.value = nv.toFixed(2).replace(/\.00$/, '');
     video.playbackRate = nv;
-    saveAutosave();
   }
   if(speedInc){ speedInc.addEventListener('click', ()=>{ setSpeedVal((parseFloat(changeSpeed.value)||1.0) + (parseFloat(changeSpeed.step)||0.25)); }); }
   if(speedDec){ speedDec.addEventListener('click', ()=>{ setSpeedVal((parseFloat(changeSpeed.value)||1.0) - (parseFloat(changeSpeed.step)||0.25)); }); }
@@ -256,6 +266,25 @@
     download(JSON.stringify(out, null, 2), filename, 'application/json');
   });
 
+  // Import JSON (from exported session files)
+  if(importJsonFile){
+    importJsonFile.addEventListener('change', (ev)=>{
+      const f = ev.target.files && ev.target.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = function(evt){
+        try{
+          const parsed = JSON.parse(evt.target.result);
+          applyImportedSession(parsed);
+          alert('Imported session JSON successfully.');
+        }catch(e){ alert('Failed to import JSON: '+ e.message); }
+      };
+      reader.readAsText(f);
+      // clear selection
+      importJsonFile.value = '';
+    });
+  }
+
   exportCsvBtn.addEventListener('click', ()=>{
     const out = buildOutput();
     // states CSV
@@ -316,11 +345,69 @@
   const AS_KEY = 'oft_scoring_autosave_v0';
   function saveAutosave(){
     const vidDur = (videoDurInput && videoDurInput.value) ? parseFloat(videoDurInput.value) : 600;
-    const state = {stateTimeline, eventTimeline, activeEvents, metadata:{scorer:document.getElementById('scorer').value, subjectId:document.getElementById('subjectId').value, subject_in_time_s: subjectInTime, video_duration_s: vidDur}};
-    try{ localStorage.setItem(AS_KEY, JSON.stringify(state)); }catch(e){}
+    const state = {stateTimeline, eventTimeline, activeEvents, metadata:{scorer:document.getElementById('scorer').value, subjectId:document.getElementById('subjectId').value, subject_in_time_s: subjectInTime, video_duration_s: vidDur, video_file: video.dataset.filename || (videoFile && videoFile.files && videoFile.files[0] && videoFile.files[0].name) || ''}};
+    try{ localStorage.setItem(AS_KEY, JSON.stringify(state)); savedAutosave = state; }catch(e){}
   }
   function loadAutosave(){
-    try{ const raw = localStorage.getItem(AS_KEY); if(raw){ const s = JSON.parse(raw); if(s.stateTimeline) stateTimeline = s.stateTimeline; if(s.eventTimeline) eventTimeline = s.eventTimeline; if(s.activeEvents) activeEvents = s.activeEvents; if(s.metadata && typeof s.metadata.subject_in_time_s !== 'undefined') subjectInTime = s.metadata.subject_in_time_s; if(s.metadata && typeof s.metadata.video_duration_s !== 'undefined' && s.metadata.video_duration_s !== null){ if(videoDurInput) videoDurInput.value = s.metadata.video_duration_s; } renderStateList(); renderEventList(); renderSubjectIn(); } }catch(e){}
+    try{ const raw = localStorage.getItem(AS_KEY); if(raw){ const s = JSON.parse(raw); savedAutosave = s; /* do not auto-apply: only offer restore when same video is loaded */ } }catch(e){}
+  }
+
+  function applyAutosave(s){
+    try{
+      if(s.stateTimeline) stateTimeline = s.stateTimeline.slice(); else stateTimeline = [];
+      if(s.eventTimeline) eventTimeline = s.eventTimeline.slice(); else eventTimeline = [];
+      if(s.activeEvents) activeEvents = Object.assign({}, s.activeEvents); else activeEvents = {};
+      if(s.metadata && typeof s.metadata.subject_in_time_s !== 'undefined') subjectInTime = s.metadata.subject_in_time_s;
+      if(s.metadata && typeof s.metadata.video_duration_s !== 'undefined' && s.metadata.video_duration_s !== null){ if(videoDurInput) videoDurInput.value = s.metadata.video_duration_s; }
+      renderStateList(); renderEventList(); renderSubjectIn();
+    }catch(e){ console.error('applyAutosave error', e); }
+  }
+
+  function applyImportedSession(parsed){
+    // parsed may be canonical export (state_timeline/event_timeline) or older autosave shape
+    try{
+      // states
+      if(parsed.state_timeline && Array.isArray(parsed.state_timeline)){
+        // convert canonical states (start,end,state) -> internal stateTimeline (start,state)
+        stateTimeline = parsed.state_timeline.map(s=>({start: s.start, state: s.state}));
+      }else if(parsed.stateTimeline && Array.isArray(parsed.stateTimeline)){
+        stateTimeline = parsed.stateTimeline.slice();
+      }
+      // events
+      if(parsed.event_timeline && Array.isArray(parsed.event_timeline)){
+        eventTimeline = parsed.event_timeline.map(e=>({start: e.start, end: e.end, event: e.event}));
+      }else if(parsed.eventTimeline && Array.isArray(parsed.eventTimeline)){
+        eventTimeline = parsed.eventTimeline.slice();
+      }
+      // subject placement and metadata (check multiple keys)
+      if(parsed.metadata){
+        if(typeof parsed.metadata.subject_placed_at_s !== 'undefined') subjectInTime = parsed.metadata.subject_placed_at_s;
+        else if(typeof parsed.metadata.subject_in_time_s !== 'undefined') subjectInTime = parsed.metadata.subject_in_time_s;
+        else if(typeof parsed.metadata.subject_placed_at_s !== 'undefined') subjectInTime = parsed.metadata.subject_placed_at_s;
+        // duration
+        if(typeof parsed.duration_s !== 'undefined'){ if(videoDurInput) videoDurInput.value = parsed.duration_s; }
+        if(typeof parsed.metadata.video_duration_s !== 'undefined'){ if(videoDurInput) videoDurInput.value = parsed.metadata.video_duration_s; }
+        // subject id / date / time / scorer
+        try{
+          if(parsed.subject && parsed.subject.id && document.getElementById('subjectId')) document.getElementById('subjectId').value = parsed.subject.id;
+          if(typeof parsed.metadata.date !== 'undefined' && document.getElementById('date')) document.getElementById('date').value = parsed.metadata.date;
+          if(typeof parsed.metadata.time !== 'undefined' && document.getElementById('time')) document.getElementById('time').value = parsed.metadata.time;
+          if(typeof parsed.metadata.scorer !== 'undefined' && document.getElementById('scorer')) document.getElementById('scorer').value = parsed.metadata.scorer;
+          if(typeof parsed.metadata.video_file !== 'undefined'){
+            if(videoFileDisplay) videoFileDisplay.textContent = `File: ${parsed.metadata.video_file}`;
+            // store as dataset for future exports
+            video.dataset.filename = parsed.metadata.video_file || '';
+          }
+        }catch(e){}
+      }
+      // set starting state from first state entry if available
+      try{
+        if(stateTimeline && stateTimeline.length>0 && startStateSel){ startStateSel.value = stateTimeline[0].state; }
+      }catch(e){}
+      renderStateList(); renderEventList(); renderSubjectIn();
+      // update autosave backup with imported session (do not change video file)
+      saveAutosave();
+    }catch(e){ throw e; }
   }
 
   // load config (yaml) if served via http(s). If not available, ignore.
