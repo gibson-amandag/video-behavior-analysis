@@ -209,7 +209,12 @@
 
   // Mark subject in / clear
   if(markInBtn){ markInBtn.addEventListener('click', ()=>{
-    subjectInTime = +seconds().toFixed(3);
+    // protect against accidental overwrite of existing annotations
+    if((stateTimeline && stateTimeline.length>0) || (eventTimeline && eventTimeline.length>0)){
+      const ok = confirm('There are existing annotations. Marking subject start will reset timelines and remove existing entries. Continue?');
+      if(!ok) return;
+    }
+    subjectInTime = +seconds().toFixed(33);
     // initialize state timeline to start at the subject placement time
     try{
       const startState = (startStateSel && startStateSel.value) ? startStateSel.value : 'EDGE';
@@ -506,17 +511,25 @@
           // intermediary entry: prompt user with options
           const msg = `Delete state at ${formatTimeSec(stateTimeline[idx].start)} — choose action:`;
           const choices = [
-            {key:'S', label: 'Delete selected + next'},
+            {key:'D', label: 'Delete selected + next'},
+            {key:'S', label: 'Delete selected + swap future'},
             {key:'A', label: 'Delete all future entries (from here)'}
           ];
           showConflictModal(msg, choices, (choice)=>{
             if(!choice) return;
-            if(choice === 'S'){
+            if(choice === 'D'){
               // remove this and the immediate next
               stateTimeline.splice(idx, Math.min(2, stateTimeline.length - idx));
             } else if(choice === 'A'){
               // remove this and all following entries
               stateTimeline.splice(idx);
+            } else if(choice === 'S'){
+              // remove only the selected entry, then flip all remaining future states
+              stateTimeline.splice(idx, 1);
+              for(let j = idx; j < stateTimeline.length; j++){
+                const s = stateTimeline[j];
+                if(s && typeof s.state === 'string') s.state = (s.state === 'EDGE' ? 'CENTER' : 'EDGE');
+              }
             }
             renderStateList(); saveAutosave();
           });
@@ -672,6 +685,13 @@
       if(s.activeEvents) activeEvents = Object.assign({}, s.activeEvents); else activeEvents = {};
       if(s.metadata && typeof s.metadata.subject_in_time_s !== 'undefined') subjectInTime = s.metadata.subject_in_time_s;
       if(s.metadata && typeof s.metadata.video_duration_s !== 'undefined' && s.metadata.video_duration_s !== null){ if(videoDurInput) videoDurInput.value = s.metadata.video_duration_s; }
+      // restore scorer, subject id, date, time if present in autosave metadata
+      try{
+        if(s.metadata && typeof s.metadata.scorer !== 'undefined' && document.getElementById('scorer')) document.getElementById('scorer').value = s.metadata.scorer;
+        if(s.metadata && typeof s.metadata.subjectId !== 'undefined' && document.getElementById('subjectId')) document.getElementById('subjectId').value = s.metadata.subjectId;
+        if(s.metadata && typeof s.metadata.date !== 'undefined' && document.getElementById('date')) document.getElementById('date').value = s.metadata.date;
+        if(s.metadata && typeof s.metadata.time !== 'undefined' && document.getElementById('time')) document.getElementById('time').value = s.metadata.time;
+      }catch(e){}
       renderStateList(); renderEventList(); renderSubjectIn();
     }catch(e){ console.error('applyAutosave error', e); }
   }

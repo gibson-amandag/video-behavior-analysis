@@ -1,5 +1,5 @@
 task: open_field
-default_start: EDGE
+default_start: CENTER
 states:
   - CENTER
   - EDGE
