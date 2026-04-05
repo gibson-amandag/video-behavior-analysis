@@ -4,40 +4,66 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Video Behavior Scoring — Open Field (OFT)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="src/css/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 </head>
 <body>
-  <div class="app">
+  <div class="app container my-4">
     <h1>OFT Scoring Tool</h1>
 
-    <section class="controls">
-      <label>Video file: <input id="videoFile" type="file" accept="video/*" /></label>
-      <label>Scorer: <input id="scorer" type="text" placeholder="RA_Jane" /></label>
-      <label>Subject ID: <input id="subjectId" type="text" placeholder="Rat12" /></label>
-      <label>Date: <input id="date" type="date" /></label>
-      <label>Time: <input id="time" type="time" /></label>
-      <div class="start-state">
-        <label>Starting state:
-          <select id="startState">
+    <section class="controls g-2 align-items-end">
+      <div class="row">
+        <div class="col-md-12">
+          <label class="form-label">Video file</label>
+          <input id="videoFile" class="form-control form-control-sm" type="file" accept="video/*" />
+        </div>
+      </div>
+      <div class="row">
+        <h3 class="col-12">Testing Information</h3>
+        <div class="col-md-4">
+          <label class="form-label">Subject ID</label>
+          <input id="subjectId" class="form-control form-control-sm" type="text" placeholder="Rat12" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Testing Date</label>
+          <input id="date" class="form-control form-control-sm" type="date" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Testing Time</label>
+          <input id="time" class="form-control form-control-sm" type="time" />
+        </div>
+      </div>
+      <div class="row">
+        <h3 class="col-12">Scoring Information</h3>
+        <div class="col-md-6">
+          <label class="form-label">Scorer</label>
+          <input id="scorer" class="form-control form-control-sm" type="text" placeholder="YourName" />
+        </div>
+        <!-- To-do: Add scoring session information, date, time, notes -->
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Starting state</label>
+        <div class="d-flex">
+          <select id="startState" class="form-select form-select-sm me-2">
             <option value="EDGE">EDGE</option>
             <option value="CENTER">CENTER</option>
           </select>
-        </label>
-        <button id="setStartState">Set Start</button>
+          <button id="setStartState" class="btn btn-sm btn-secondary">Set Start</button>
+        </div>
       </div>
     </section>
 
     <section class="player">
-      <video id="videoPlayer" controls></video>
-      <div class="player-buttons">
-        <button id="addState">Add State Transition</button>
-        <button id="startEvent">Start Event</button>
-        <select id="eventType">
+      <video id="videoPlayer" controls class="w-100" style="max-height:480px"></video>
+      <div class="player-buttons mt-2">
+        <button id="addState" class="btn btn-primary btn-sm me-2">Add State Transition</button>
+        <button id="startEvent" class="btn btn-success btn-sm me-2">Start Event</button>
+        <select id="eventType" class="form-select form-select-sm d-inline-block me-2" style="width:auto;">
           <option>GROOMING</option>
           <option>REARING</option>
         </select>
-        <button id="stopEvent">Stop Event</button>
+        <button id="stopEvent" class="btn btn-warning btn-sm">Stop Event</button>
       </div>
     </section>
 
@@ -49,13 +75,14 @@
       <ul id="eventList"></ul>
     </section>
 
-    <section class="exports">
-      <button id="exportJson">Export JSON</button>
-      <button id="exportCsv">Export CSV</button>
-      <button id="clearAll">Clear All</button>
+    <section class="exports mt-3">
+      <button id="exportJson" class="btn btn-outline-primary btn-sm me-2">Export JSON</button>
+      <button id="exportCsv" class="btn btn-outline-secondary btn-sm me-2">Export CSV</button>
+      <button id="clearAll" class="btn btn-danger btn-sm">Clear All</button>
     </section>
   </div>
 
   <script src="src/js/app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
