@@ -359,7 +359,7 @@
       video.currentTime = Math.min((video.duration||Infinity), (video.currentTime || 0) + 10);
       e.preventDefault();
     }
-    if(e.key === 'x'){ // play/pause toggle
+    if(e.key === 'x' || e.key === 'm'){ // play/pause toggle
       if(video.paused) video.play(); else video.pause();
       e.preventDefault();
     }
