@@ -333,11 +333,11 @@
       e.preventDefault();
     }
     
-    // alternate speed keys requested: q/w/a/s
-    if(e.key === 'q'){ setSpeedVal(0.5); }
-    if(e.key === 'w'){ setSpeedVal(1.0); }
-    if(e.key === 'a'){ setSpeedVal(2.0); }
-    if(e.key === 's'){ setSpeedVal(3.0); }
+    // alternate speed keys requested: u/i/j/k
+    if(e.key === 'u'){ setSpeedVal(0.5); }
+    if(e.key === 'i'){ setSpeedVal(1.0); }
+    if(e.key === 'j'){ setSpeedVal(2.0); }
+    if(e.key === 'k'){ setSpeedVal(3.0); }
 
     // frame stepping (up/down)
     // Up/Down: adjust playback speed by step value

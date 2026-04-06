@@ -3,11 +3,11 @@ task: elevated_plus
 default_start: CENTER
 states:
   - name: CLOSED
-    key: u
+    key: a
   - name: CENTER
-    key: i
+    key: s
   - name: OPEN
-    key: o
+    key: d
 events:
   - name: GROOMING
     key: g
