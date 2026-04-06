@@ -643,11 +643,69 @@
       const tdEndStamp = document.createElement('td'); tdEndStamp.textContent = '—';
       const tdDur = document.createElement('td'); tdDur.textContent = 'active';
       const tdAct = document.createElement('td');
+      const editStartBtn = document.createElement('button'); editStartBtn.className = 'btn btn-sm btn-outline-secondary me-1'; editStartBtn.textContent = 'Edit start';
+      editStartBtn.addEventListener('click', ()=>{
+        try{
+          // prevent multiple editors
+          if(tdStamp.querySelector('input')) return;
+          const current = (typeof start === 'number')? formatTimeSec(start) : '';
+          tdStamp.innerHTML = '';
+          const input = document.createElement('input'); input.type = 'text'; input.className = 'form-control form-control-sm'; input.style.width = '140px'; input.value = current; input.placeholder = 'MM:SS.ms or SS.ms';
+          tdStamp.appendChild(input);
+
+          // replace action buttons with Now / Save / Cancel
+          const origActHtml = tdAct.innerHTML;
+          tdAct.innerHTML = '';
+          const nowBtn = document.createElement('button'); nowBtn.className = 'btn btn-sm btn-outline-primary me-1'; nowBtn.textContent = 'Now';
+          const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-sm btn-primary me-1'; saveBtn.textContent = 'Save';
+          const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-sm btn-secondary'; cancelBtn.textContent = 'Cancel';
+          tdAct.appendChild(nowBtn); tdAct.appendChild(saveBtn); tdAct.appendChild(cancelBtn);
+
+          nowBtn.addEventListener('click', ()=>{ try{ input.value = formatTimeSec(seconds()); input.focus(); input.select(); }catch(e){} });
+          saveBtn.addEventListener('click', ()=>{
+            const val = parseTimeToSec(input.value);
+            if(Number.isNaN(val)){ alert('Invalid timestamp format'); return; }
+            // ensure start < now for active events
+            if(val > seconds() + 1e-6){ alert('Start cannot be in the future'); return; }
+            activeEvents[evName] = +val.toFixed(3);
+            tdAct.innerHTML = origActHtml; renderEventList(); saveAutosave();
+          });
+          cancelBtn.addEventListener('click', ()=>{ tdAct.innerHTML = origActHtml; renderEventList(); });
+          input.focus(); input.select();
+        }catch(err){ console.error('active edit start error', err); }
+      });
+      const editEndBtn = document.createElement('button'); editEndBtn.className = 'btn btn-sm btn-outline-secondary me-1'; editEndBtn.textContent = 'Set end';
+      editEndBtn.addEventListener('click', ()=>{
+        try{
+          // prevent multiple editors
+          if(tdEndStamp.querySelector('input')) return;
+          const suggested = formatTimeSec(seconds());
+          tdEndStamp.innerHTML = '';
+          const input = document.createElement('input'); input.type = 'text'; input.className = 'form-control form-control-sm'; input.style.width = '140px'; input.value = suggested; input.placeholder = 'MM:SS.ms or SS.ms';
+          tdEndStamp.appendChild(input);
+
+          const origActHtml = tdAct.innerHTML;
+          tdAct.innerHTML = '';
+          const nowBtn = document.createElement('button'); nowBtn.className = 'btn btn-sm btn-outline-primary me-1'; nowBtn.textContent = 'Now';
+          const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-sm btn-primary me-1'; saveBtn.textContent = 'Save';
+          const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-sm btn-secondary'; cancelBtn.textContent = 'Cancel';
+          tdAct.appendChild(nowBtn); tdAct.appendChild(saveBtn); tdAct.appendChild(cancelBtn);
+
+          nowBtn.addEventListener('click', ()=>{ try{ input.value = formatTimeSec(seconds()); input.focus(); input.select(); }catch(e){} });
+          saveBtn.addEventListener('click', ()=>{
+            const parsed = parseTimeToSec(input.value);
+            if(Number.isNaN(parsed)){ alert('Invalid timestamp'); return; }
+            const st = activeEvents[evName]; if(typeof st !== 'number'){ alert('No active start time'); return; }
+            if(parsed <= st + 1e-6){ alert('End time must be greater than start time'); return; }
+            eventTimeline.push({start: st, end: +parsed.toFixed(3), event: evName}); delete activeEvents[evName]; tdAct.innerHTML = origActHtml; renderEventList(); saveAutosave();
+          });
+          cancelBtn.addEventListener('click', ()=>{ tdAct.innerHTML = origActHtml; renderEventList(); });
+          input.focus(); input.select();
+        }catch(err){ console.error('active set end error', err); }
+      });
       const stopBtn = document.createElement('button'); stopBtn.className = 'btn btn-sm btn-warning me-1'; stopBtn.textContent = 'Stop';
       stopBtn.addEventListener('click', ()=>{ const e = +seconds().toFixed(3); eventTimeline.push({start: start, end: e, event: evName}); delete activeEvents[evName]; renderEventList(); saveAutosave(); });
-      const seekBtn = document.createElement('button'); seekBtn.className = 'btn btn-sm btn-secondary'; seekBtn.textContent = 'Seek';
-      seekBtn.addEventListener('click', ()=>{ try{ video.currentTime = start; video.pause(); }catch(e){} });
-      tdAct.appendChild(stopBtn); tdAct.appendChild(seekBtn);
+      tdAct.appendChild(editStartBtn); tdAct.appendChild(editEndBtn); tdAct.appendChild(stopBtn);
       tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdEnd); tr.appendChild(tdEndStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
       if(tbody) tbody.appendChild(tr);
     });
@@ -673,9 +731,59 @@
         } else { tdEndStamp.textContent = '—'; }
         const tdDur = document.createElement('td'); tdDur.textContent = ((typeof e.end==='number' && typeof e.start==='number')? (e.end - e.start).toFixed(3) : '—');
         const tdAct = document.createElement('td');
+        const editStartBtn = document.createElement('button'); editStartBtn.className = 'btn btn-sm btn-outline-secondary me-1'; editStartBtn.textContent = 'Edit start';
+        editStartBtn.addEventListener('click', ()=>{
+          try{
+            if(tdStamp.querySelector('input')) return;
+            const current = (typeof e.start === 'number')? formatTimeSec(e.start) : '';
+            tdStamp.innerHTML = '';
+            const input = document.createElement('input'); input.type = 'text'; input.className = 'form-control form-control-sm'; input.style.width = '140px'; input.value = current; input.placeholder = 'MM:SS.ms or SS.ms';
+            tdStamp.appendChild(input);
+            const origActHtml = tdAct.innerHTML; tdAct.innerHTML = '';
+            const nowBtn = document.createElement('button'); nowBtn.className = 'btn btn-sm btn-outline-primary me-1'; nowBtn.textContent = 'Now';
+            const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-sm btn-primary me-1'; saveBtn.textContent = 'Save';
+            const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-sm btn-secondary'; cancelBtn.textContent = 'Cancel';
+            tdAct.appendChild(nowBtn); tdAct.appendChild(saveBtn); tdAct.appendChild(cancelBtn);
+            nowBtn.addEventListener('click', ()=>{ try{ input.value = formatTimeSec(seconds()); input.focus(); input.select(); }catch(e){} });
+            saveBtn.addEventListener('click', ()=>{
+              const parsed = parseTimeToSec(input.value);
+              if(Number.isNaN(parsed)){ alert('Invalid timestamp'); return; }
+              if(typeof e.end === 'number' && parsed >= e.end - 1e-6){ alert('Start must be < end'); return; }
+              e.start = +parsed.toFixed(3);
+              tdAct.innerHTML = origActHtml; renderEventList(); saveAutosave();
+            });
+            cancelBtn.addEventListener('click', ()=>{ tdAct.innerHTML = origActHtml; renderEventList(); });
+            input.focus(); input.select();
+          }catch(err){ console.error('edit finished start error', err); }
+        });
+        const editEndBtn = document.createElement('button'); editEndBtn.className = 'btn btn-sm btn-outline-secondary me-1'; editEndBtn.textContent = 'Edit end';
+        editEndBtn.addEventListener('click', ()=>{
+          try{
+            if(tdEndStamp.querySelector('input')) return;
+            const current = (typeof e.end === 'number')? formatTimeSec(e.end) : '';
+            tdEndStamp.innerHTML = '';
+            const input = document.createElement('input'); input.type = 'text'; input.className = 'form-control form-control-sm'; input.style.width = '140px'; input.value = current; input.placeholder = 'MM:SS.ms or SS.ms';
+            tdEndStamp.appendChild(input);
+            const origActHtml = tdAct.innerHTML; tdAct.innerHTML = '';
+            const nowBtn = document.createElement('button'); nowBtn.className = 'btn btn-sm btn-outline-primary me-1'; nowBtn.textContent = 'Now';
+            const saveBtn = document.createElement('button'); saveBtn.className = 'btn btn-sm btn-primary me-1'; saveBtn.textContent = 'Save';
+            const cancelBtn = document.createElement('button'); cancelBtn.className = 'btn btn-sm btn-secondary'; cancelBtn.textContent = 'Cancel';
+            tdAct.appendChild(nowBtn); tdAct.appendChild(saveBtn); tdAct.appendChild(cancelBtn);
+            nowBtn.addEventListener('click', ()=>{ try{ input.value = formatTimeSec(seconds()); input.focus(); input.select(); }catch(e){} });
+            saveBtn.addEventListener('click', ()=>{
+              const parsed = parseTimeToSec(input.value);
+              if(Number.isNaN(parsed)){ alert('Invalid timestamp'); return; }
+              if(parsed <= e.start + 1e-6){ alert('End must be > start'); return; }
+              e.end = +parsed.toFixed(3);
+              tdAct.innerHTML = origActHtml; renderEventList(); saveAutosave();
+            });
+            cancelBtn.addEventListener('click', ()=>{ tdAct.innerHTML = origActHtml; renderEventList(); });
+            input.focus(); input.select();
+          }catch(err){ console.error('edit finished end error', err); }
+        });
         const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
         del.addEventListener('click', ()=>{ const idx = eventTimeline.indexOf(e); if(idx!==-1) eventTimeline.splice(idx,1); renderEventList(); saveAutosave(); });
-        tdAct.appendChild(del);
+        tdAct.appendChild(editStartBtn); tdAct.appendChild(editEndBtn); tdAct.appendChild(del);
         tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdEnd); tr.appendChild(tdEndStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
         if(tbody) tbody.appendChild(tr);
       });
