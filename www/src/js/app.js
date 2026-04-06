@@ -1,7 +1,7 @@
 // Minimal OFT scoring engine (served under www/ for Shiny)
 (function(){
   const TOOL_VERSION = "0.1.0";
-  const TASK_CONFIG = "config/open_field.yaml";
+  let TASK_CONFIG = "config/open_field.yaml";
 
   // State and event timelines
   let stateTimeline = []; // entries: {start: seconds, state: 'EDGE'|'CENTER'}
@@ -34,12 +34,13 @@
   const startEventBtn = document.getElementById('startEvent');
   const stopEventBtn = document.getElementById('stopEvent');
   const eventTypeSel = document.getElementById('eventType');
-  const exportJsonBtn = document.getElementById('exportJson');
+  const exportJsonBtns = document.querySelectorAll('.exportJson');
   const exportCsvBtn = document.getElementById('exportCsv');
   const clearAllBtn = document.getElementById('clearAll');
   const importJsonFile = document.getElementById('importJsonFile');
   const setStartStateBtn = document.getElementById('setStartState');
   const startStateSel = document.getElementById('startState');
+  const taskTypeSel = document.getElementById('taskType');
 
   
 
@@ -882,11 +883,13 @@
     });
   }
 
-  exportJsonBtn.addEventListener('click', ()=>{
-    const out = buildOutput();
-    const filename = `${out.session_id || 'session'}.json`;
-    download(JSON.stringify(out, null, 2), filename, 'application/json');
-  });
+  if(exportJsonBtns && exportJsonBtns.length){
+    Array.from(exportJsonBtns).forEach(btn=> btn.addEventListener('click', ()=>{
+      const out = buildOutput();
+      const filename = `${out.session_id || 'session'}.json`;
+      download(JSON.stringify(out, null, 2), filename, 'application/json');
+    }));
+  }
 
   // Import JSON (from exported session files)
   if(importJsonFile){
@@ -907,7 +910,7 @@
     });
   }
 
-  exportCsvBtn.addEventListener('click', ()=>{
+  if(exportCsvBtn){ exportCsvBtn.addEventListener('click', ()=>{
     const out = buildOutput();
     // states CSV
     const statesCsv = ['start,end,state'];
@@ -916,7 +919,7 @@
     out.event_timeline.forEach(e=> eventsCsv.push(`${e.start},${e.end},${e.event}`));
     const csvCombined = ['--- STATES ---'].concat(statesCsv).concat(['','--- EVENTS ---']).concat(eventsCsv).join('\n');
     download(csvCombined, `${out.session_id||'session'}.csv`, 'text/csv');
-  });
+  }); }
 
   clearAllBtn.addEventListener('click', ()=>{
     if(!confirm('Clear all annotations? This cannot be undone.')) return;
@@ -946,9 +949,14 @@
     // compute session end if subject placed
     let session_end = null;
     if(subjectInTime !== null){ session_end = subjectInTime + duration; }
+    // determine current task from selector or config basename
+    let taskVal = 'open_field';
+    try{ if(taskTypeSel && taskTypeSel.value) taskVal = taskTypeSel.value; else taskVal = TASK_CONFIG.split('/').pop().replace('.yaml',''); }catch(e){}
+    const shortMap = { 'open_field': 'OFT', 'light_dark': 'LD' };
+    const shortTag = shortMap[taskVal] || taskVal.toUpperCase();
     const out = {
-      session_id: `${document.getElementById('subjectId').value || 'subject'}_OFT_${document.getElementById('date').value || new Date().toISOString().slice(0,10)}`,
-      task: 'open_field',
+      session_id: `${document.getElementById('subjectId').value || 'subject'}_${shortTag}_${document.getElementById('date').value || new Date().toISOString().slice(0,10)}`,
+      task: taskVal,
       duration_s: duration,
       subject: {species:'rat', id: document.getElementById('subjectId').value || ''},
       metadata: { video_file: video.dataset.filename||'', date: document.getElementById('date').value||'', time: document.getElementById('time').value||'', scorer: document.getElementById('scorer').value||'', comments: '' , subject_placed_at_s: subjectInTime, session_end_s: session_end, session_end_note: session_end !== null ? `Computed end = ${formatTimeSec(session_end)} (${session_end.toFixed(3)} s)` : '', manual_flags: manualFlags.slice()},
@@ -972,7 +980,10 @@
   const AS_KEY = 'oft_scoring_autosave_v0';
   function saveAutosave(){
     const vidDur = (videoDurInput && videoDurInput.value) ? parseFloat(videoDurInput.value) : 600;
-    const state = {stateTimeline, eventTimeline, activeEvents, metadata:{scorer:document.getElementById('scorer').value, subjectId:document.getElementById('subjectId').value, subject_in_time_s: subjectInTime, video_duration_s: vidDur, video_file: video.dataset.filename || (videoFile && videoFile.files && videoFile.files[0] && videoFile.files[0].name) || '', manual_flags: manualFlags.slice()}};
+    // include current task selection in autosave metadata
+    let currentTaskVal = null;
+    try{ if(taskTypeSel && taskTypeSel.value) currentTaskVal = taskTypeSel.value; else currentTaskVal = TASK_CONFIG.split('/').pop().replace('.yaml',''); }catch(e){}
+    const state = {stateTimeline, eventTimeline, activeEvents, metadata:{scorer:document.getElementById('scorer').value, subjectId:document.getElementById('subjectId').value, subject_in_time_s: subjectInTime, video_duration_s: vidDur, video_file: video.dataset.filename || (videoFile && videoFile.files && videoFile.files[0] && videoFile.files[0].name) || '', manual_flags: manualFlags.slice(), task: currentTaskVal, task_config: TASK_CONFIG}};
     try{ localStorage.setItem(AS_KEY, JSON.stringify(state)); savedAutosave = state; }catch(e){}
   }
   function loadAutosave(){
@@ -986,6 +997,11 @@
       if(s.activeEvents) activeEvents = Object.assign({}, s.activeEvents); else activeEvents = {};
       if(s.metadata && typeof s.metadata.subject_in_time_s !== 'undefined') subjectInTime = s.metadata.subject_in_time_s;
       if(s.metadata && typeof s.metadata.video_duration_s !== 'undefined' && s.metadata.video_duration_s !== null){ if(videoDurInput) videoDurInput.value = s.metadata.video_duration_s; }
+      // restore task selection if present in autosave metadata
+      try{
+        const t = (s.metadata && s.metadata.task) ? s.metadata.task : (s.metadata && s.metadata.task_config ? (s.metadata.task_config.split('/').pop().replace('.yaml','')) : null);
+        if(t){ TASK_CONFIG = `config/${t}.yaml`; if(taskTypeSel) taskTypeSel.value = t; try{ loadConfig(); }catch(e){} }
+      }catch(e){}
       // restore scorer, subject id, date, time if present in autosave metadata
       try{
         if(s.metadata && typeof s.metadata.scorer !== 'undefined' && document.getElementById('scorer')) document.getElementById('scorer').value = s.metadata.scorer;
@@ -1038,6 +1054,11 @@
           }
         }catch(e){}
       }
+      // if the imported session specifies a task, switch to it (but keep annotations loaded)
+      try{
+        const importedTask = parsed.task || (parsed.task_config ? parsed.task_config.split('/').pop().replace('.yaml','') : (parsed.metadata && parsed.metadata.task ? parsed.metadata.task : null));
+        if(importedTask){ TASK_CONFIG = `config/${importedTask}.yaml`; if(taskTypeSel) taskTypeSel.value = importedTask; try{ loadConfig(); }catch(e){} }
+      }catch(e){}
       // set starting state from first state entry if available
       try{
         if(stateTimeline && stateTimeline.length>0 && startStateSel){ startStateSel.value = stateTimeline[0].state; }
@@ -1107,10 +1128,30 @@
   try{ ensureEventTables(); renderEventList(); }catch(e){}
   loadConfig();
 
+  // initialize task selector and handle changes
+  try{
+    if(taskTypeSel){
+      // set selector to match default TASK_CONFIG
+      try{ const basename = TASK_CONFIG.split('/').pop().replace('.yaml',''); taskTypeSel.value = basename; }catch(e){}
+      taskTypeSel.addEventListener('change', ()=>{
+        if(!confirm('Change task type and reload configuration? Existing annotations will be left in place. Continue?')){
+          // revert selection to current
+          try{ const basename = TASK_CONFIG.split('/').pop().replace('.yaml',''); taskTypeSel.value = basename; }catch(e){}
+          return;
+        }
+        TASK_CONFIG = `config/${taskTypeSel.value}.yaml`;
+        try{ loadConfig(); ensureEventTables(); renderEventList(); renderStateList(); }catch(e){ console.error('reload config error', e); }
+      });
+    }
+  }catch(e){}
+
   // update current state as video plays/seeks
   try{ video.addEventListener('timeupdate', updateCurrentStateDisplay); }catch(e){}
 
-  // expose for debugging
-  window._oft = {stateTimeline, eventTimeline, buildOutput, stateTypes, eventTypes, additionalForState};
+  // expose for debugging (include current task)
+  try{
+    const currentTask = (taskTypeSel && taskTypeSel.value) ? taskTypeSel.value : (TASK_CONFIG.split('/').pop().replace('.yaml',''));
+    window._oft = {stateTimeline, eventTimeline, buildOutput, stateTypes, eventTypes, additionalForState, TASK_CONFIG, currentTask};
+  }catch(e){ window._oft = {stateTimeline, eventTimeline, buildOutput, stateTypes, eventTypes, additionalForState}; }
 
 })();
