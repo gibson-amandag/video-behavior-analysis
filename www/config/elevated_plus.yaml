@@ -1,0 +1,22 @@
+# Elevated plus maze configuration for scoring
+task: elevated_plus
+default_start: CENTER
+states:
+  - name: CLOSED
+    key: u
+  - name: CENTER
+    key: i
+  - name: OPEN
+    key: o
+events:
+  - name: GROOMING
+    key: g
+  - name: REARING
+    key: r
+  - name: STRETCH-ATTEND
+    key: t
+colors:
+  CLOSED: '#ffeeaa'
+  CENTER: '#cccccc'
+  OPEN: '#dddddd'
+duration: 300

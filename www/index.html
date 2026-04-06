@@ -19,6 +19,7 @@
         <select id="taskType" class="form-select form-select-sm">
           <option value="open_field" selected>Open Field (OFT)</option>
           <option value="light_dark">Light-Dark Box</option>
+          <option value="elevated_plus">Elevated Plus Maze</option>
         </select>
         <div class="form-text">Select which task configuration to use (loads YAML).</div>
       </div>
@@ -115,6 +116,12 @@
         <div class="row">
           <div class="col-4">
             <button id="addState" class="btn btn-primary me-2">Add State Transition</button>
+            <div id="addStateGroup" class="d-none">
+              <div class="input-group input-group-sm">
+                <select id="addStateSelect" class="form-select form-select-sm"></select>
+                <button id="setStateBtn" class="btn btn-primary">Start</button>
+              </div>
+            </div>
           </div>
           <div class="col-8">
             <div class="row">
@@ -143,7 +150,7 @@
           <ul class="mb-0">
             <li><strong>Place subject:</strong> <kbd>p</kbd> = mark subject start time</li>
             <li id="keystrokesEvents"><strong>Events:</strong> <span class="small text-muted">(loading)</span></li>
-            <li><strong>State:</strong> <kbd>v</kbd> = add state transition (switch state)</li>
+            <li id="stateKeystrokeInfo"><strong>State:</strong> <kbd>v</kbd> = add state transition (switch state)</li>
             <li><strong>Back to last state:</strong> <kbd>b</kbd> = go back to the last recorded state</li>
           </ul>
         </div>

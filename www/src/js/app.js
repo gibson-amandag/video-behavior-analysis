@@ -13,6 +13,7 @@
   let eventTypes = null; // array of event type objects {name, key}
   let stateTypes = null; // array of state names from config
   let additionalForState = {}; // map: stateName -> array of {field,label,type}
+  let stateKeyMap = {};
   let DEFAULT_DURATION = 600;
   const eventTableBodies = {}; // map: eventName -> tbody element
 
@@ -30,6 +31,9 @@
   const videoDurInput = document.getElementById('videoDur');
   const stepInput = document.getElementById('stepSize');
   const addStateBtn = document.getElementById('addState');
+  const addStateGroup = document.getElementById('addStateGroup');
+  const addStateSelect = document.getElementById('addStateSelect');
+  const setStateBtn = document.getElementById('setStateBtn');
   const stateTableBody = document.getElementById('stateTableBody');
   const eventTablesContainer = document.getElementById('eventTablesContainer');
   const startEventBtn = document.getElementById('startEvent');
@@ -73,6 +77,20 @@
       box.appendChild(btnRow); box.appendChild(cancel);
       overlay.appendChild(box); document.body.appendChild(overlay);
     }catch(e){ cb(null); }
+  }
+
+  function updateStateControlsUI(){
+    try{
+      if(stateTypes && stateTypes.length >= 3){
+        // show select + start button, hide single add button
+        if(addStateBtn) addStateBtn.classList.add('d-none');
+        if(addStateGroup) addStateGroup.classList.remove('d-none');
+        if(addStateSelect){ addStateSelect.innerHTML = ''; stateTypes.forEach(s=>{ const o = document.createElement('option'); o.value = s; o.textContent = s; addStateSelect.appendChild(o); }); }
+      } else {
+        if(addStateBtn) addStateBtn.classList.remove('d-none');
+        if(addStateGroup) addStateGroup.classList.add('d-none');
+      }
+    }catch(e){}
   }
 
   function handleConflict(idx){
@@ -377,8 +395,20 @@
       }
     }catch(err){}
 
-    // state switch
-    if(e.key === 'v'){ if(addStateBtn) addStateBtn.click(); }
+    // state keys: if configured in YAML, start chosen state on keypress
+    try{
+      const pressed = (e.key || '').toLowerCase();
+      let matchedState = null;
+      Object.keys(stateKeyMap || {}).forEach(st=>{ if(stateKeyMap[st] && stateKeyMap[st].toLowerCase() === pressed) matchedState = st; });
+      if(matchedState){
+        // insert a transition to matchedState at current time
+        try{ insertStateAt(seconds(), matchedState); e.preventDefault(); }
+        catch(e){}
+      } else {
+        // legacy single-key behavior: 'v' to add/cycle state
+        if(e.key === 'v'){ if(addStateBtn && !addStateBtn.classList.contains('d-none')) addStateBtn.click(); }
+      }
+    }catch(e){}
   });
 
   // helper: toggle named event start/stop
@@ -429,6 +459,33 @@
     if(conflictPrev || conflictNext){ handleConflict(insertIdx); }
     renderStateList(); saveAutosave();
   });
+
+  // helper to insert a state at time t with explicit state name
+  function insertStateAt(t, desiredState){
+    if(subjectInTime === null){ alert('Please mark subject start time before adding state transitions.'); return; }
+    const time = +t.toFixed(3);
+    if(time < subjectInTime){ alert('State transitions must occur at or after subject placement time.'); return; }
+    let insertIdx = stateTimeline.findIndex(s=> (typeof s.start==='number' && s.start > time));
+    if(insertIdx === -1) insertIdx = stateTimeline.length;
+    // validate within session end
+    const end = sessionEnd();
+    if(time > end + 1e-6){ alert('New time is after configured session end; adjust duration or choose a different time.'); return; }
+    const newEntry = {start: +time.toFixed(3), state: desiredState};
+    try{ const descs = additionalForState[desiredState] || []; descs.forEach(d=>{ if(d.type === 'checkbox') newEntry[d.field] = false; else newEntry[d.field] = ''; }); }catch(e){}
+    stateTimeline.splice(insertIdx, 0, newEntry);
+    const conflictPrev = (insertIdx>0 && stateTimeline[insertIdx-1] && stateTimeline[insertIdx-1].state === desiredState);
+    const conflictNext = (insertIdx+1 < stateTimeline.length && stateTimeline[insertIdx+1] && stateTimeline[insertIdx+1].state === desiredState);
+    if(conflictPrev || conflictNext){ handleConflict(insertIdx); }
+    renderStateList(); saveAutosave();
+  }
+
+  if(setStateBtn){ setStateBtn.addEventListener('click', ()=>{
+    try{
+      const s = addStateSelect && addStateSelect.value ? addStateSelect.value : null;
+      if(!s){ alert('Select a state to start'); return; }
+      insertStateAt(seconds(), s);
+    }catch(e){ console.error('setStateBtn error', e); }
+  }); }
 
   startEventBtn.addEventListener('click', ()=>{
     const ev = eventTypeSel.value;
@@ -685,9 +742,26 @@
   function renderKeystrokes(){
     try{
       const holder = document.getElementById('keystrokesEvents');
+      const stateKeystrokeInfo = document.getElementById('stateKeystrokeInfo');
       if(!holder) return;
       // build list of mappings
       const parts = [];
+      // include state key mappings if present
+      // update the separate State instruction li
+      try{
+        if(stateKeystrokeInfo){
+          if(stateKeyMap && Object.keys(stateKeyMap).length>0){
+            // show configured state keys
+            stateKeystrokeInfo.innerHTML = '<strong>State:</strong> ' + Object.keys(stateKeyMap).map(st=> `<kbd>${stateKeyMap[st]}</kbd> = ${st}`).join(', ');
+          } else if(stateTypes && stateTypes.length >= 3){
+            stateKeystrokeInfo.innerHTML = '<strong>State:</strong> use the dropdown and Start button to begin a state';
+          } else {
+            stateKeystrokeInfo.innerHTML = '<strong>State:</strong> <kbd>v</kbd> = add state transition (switch state)';
+          }
+        }
+      }catch(e){}
+      // State keystrokes are shown in the separate `stateKeystrokeInfo` element above;
+      // do not duplicate them in the events list (parts).
       if(eventTypes && eventTypes.length>0){
         eventTypes.forEach(ev=>{
           const name = (typeof ev==='string')? ev : (ev.name || ev.event);
@@ -953,7 +1027,7 @@
     // determine current task from selector or config basename
     let taskVal = 'open_field';
     try{ if(taskTypeSel && taskTypeSel.value) taskVal = taskTypeSel.value; else taskVal = TASK_CONFIG.split('/').pop().replace('.yaml',''); }catch(e){}
-    const shortMap = { 'open_field': 'OFT', 'light_dark': 'LD' };
+    const shortMap = { 'open_field': 'OFT', 'light_dark': 'LD', 'elevated_plus': 'EPM' };
     const shortTag = shortMap[taskVal] || taskVal.toUpperCase();
     const out = {
       session_id: `${document.getElementById('subjectId').value || 'subject'}_${shortTag}_${document.getElementById('date').value || new Date().toISOString().slice(0,10)}`,
@@ -1073,7 +1147,7 @@
   // load config (yaml) if served via http(s). If not available, ignore.
   function loadConfig(){
     // reset previous config-derived globals so switching tasks clears old options/columns
-    try{ additionalForState = {}; stateTypes = []; eventTypes = null; if(startStateSel) startStateSel.innerHTML = ''; if(eventTypeSel) eventTypeSel.innerHTML = ''; }catch(e){}
+    try{ additionalForState = {}; stateTypes = []; eventTypes = null; stateKeyMap = {}; if(startStateSel) startStateSel.innerHTML = ''; if(eventTypeSel) eventTypeSel.innerHTML = ''; if(addStateSelect) addStateSelect.innerHTML = ''; }catch(e){}
     fetch(TASK_CONFIG).then(r=>{
       if(!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.text();
@@ -1082,7 +1156,12 @@
         const cfg = jsyaml.load(txt);
         // load state types from config and populate start state select
         if(cfg && cfg.states && Array.isArray(cfg.states) && cfg.states.length>0){
-          stateTypes = cfg.states.map(item => (typeof item === 'string')? item : (item.name || String(item)));
+          stateTypes = [];
+          stateKeyMap = {};
+          cfg.states.forEach(item=>{
+            if(typeof item === 'string'){ stateTypes.push(item); }
+            else if(typeof item === 'object'){ const name = item.name || item.state || String(item); stateTypes.push(name); if(item.key) stateKeyMap[name] = item.key; }
+          });
           try{
             if(startStateSel){ startStateSel.innerHTML = ''; stateTypes.forEach(s=>{ const o = document.createElement('option'); o.textContent = s; o.value = s; startStateSel.appendChild(o); }); }
           }catch(e){}
@@ -1122,6 +1201,8 @@
         } else {
           // events not present in config; fall back to select/defaults
         }
+        // update state controls UI depending on number of states
+        try{ updateStateControlsUI(); renderKeystrokes(); }catch(e){}
       }catch(e){
         // parsing failed; ignore and continue with defaults
       }
