@@ -697,8 +697,24 @@
           // For multi-state tasks (3+ states) use a simple confirm for deletions.
           if(stateTypes && stateTypes.length >= 3){
             if(confirm(`Delete state at ${formatTimeSec(stateTimeline[idx].start)}?`)){
-              stateTimeline.splice(idx, 1);
-              renderStateList(); saveAutosave();
+              // check whether deleting this entry would create two identical consecutive states
+              const prev = (idx>0)? stateTimeline[idx-1]: null;
+              const next = (idx+1 < stateTimeline.length)? stateTimeline[idx+1]: null;
+              if(prev && next && prev.state === next.state){
+                // ask user whether to delete all future entries or cancel
+                const msg = `Deleting this entry would make ${prev.state} occur twice in a row. Delete all future entries from here or cancel?`;
+                const choices = [ {key:'A', label: 'Delete all future entries (from here)'} ];
+                showConflictModal(msg, choices, (choice)=>{
+                  if(!choice) return; // cancelled
+                  if(choice === 'A'){
+                    stateTimeline.splice(idx);
+                    renderStateList(); saveAutosave();
+                  }
+                });
+              } else {
+                stateTimeline.splice(idx,1);
+                renderStateList(); saveAutosave();
+              }
             }
           } else {
             // intermediary entry: prompt user with options
