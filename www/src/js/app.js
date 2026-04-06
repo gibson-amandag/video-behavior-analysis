@@ -11,6 +11,7 @@
   let savedAutosave = null; // raw autosave stash (do not auto-apply)
   let manualFlags = [];
   let eventTypes = null; // array of event type objects {name, key}
+  let stateTypes = null; // array of state names from config
   const eventTableBodies = {}; // map: eventName -> tbody element
 
   // DOM
@@ -95,7 +96,15 @@
       }
       else if(choice === 'I'){
         // insert complementary state between current and next
-        const comp = current.state === 'EDGE' ? 'CENTER' : 'EDGE';
+        let comp = null;
+        try{
+          if(stateTypes && Array.isArray(stateTypes) && stateTypes.length>0){
+            const curIdx = stateTypes.indexOf(current.state);
+            comp = stateTypes[(curIdx + 1) % stateTypes.length];
+          } else {
+            comp = current.state === 'EDGE' ? 'CENTER' : 'EDGE';
+          }
+        }catch(e){ comp = current.state === 'EDGE' ? 'CENTER' : 'EDGE'; }
         let nextStart = sessionEnd();
         if(next && typeof next.start === 'number') nextStart = next.start;
         let mid = current.start + Math.min(0.5, Math.max(0.001, (nextStart - current.start)/2));
@@ -109,11 +118,21 @@
         stateTimeline.splice(idx+1);
       }
       else if(choice === 'S'){
-        // flip all future states starting after the current insertion index
+        // advance all future states in the configured state sequence (cycle)
         try{
-          for(let j = idx+1; j < stateTimeline.length; j++){
-            const s = stateTimeline[j];
-            if(s && typeof s.state === 'string') s.state = (s.state === 'EDGE'? 'CENTER' : 'EDGE');
+          if(stateTypes && Array.isArray(stateTypes) && stateTypes.length>0){
+            for(let j = idx+1; j < stateTimeline.length; j++){
+              const s = stateTimeline[j];
+              if(s && typeof s.state === 'string'){
+                const cur = stateTypes.indexOf(s.state);
+                s.state = stateTypes[(cur + 1) % stateTypes.length];
+              }
+            }
+          } else {
+            for(let j = idx+1; j < stateTimeline.length; j++){
+              const s = stateTimeline[j];
+              if(s && typeof s.state === 'string') s.state = (s.state === 'EDGE'? 'CENTER' : 'EDGE');
+            }
           }
         }catch(e){ console.error('swap future error', e); }
       }
@@ -382,9 +401,15 @@
     let insertIdx = stateTimeline.findIndex(s=> (typeof s.start==='number' && s.start > t));
     if(insertIdx === -1) insertIdx = stateTimeline.length;
     // determine prev state at this time
-    const prevState = (insertIdx>0 && stateTimeline[insertIdx-1])? stateTimeline[insertIdx-1].state : (stateTimeline.length>0? stateTimeline[0].state : 'EDGE');
+    const prevState = (insertIdx>0 && stateTimeline[insertIdx-1])? stateTimeline[insertIdx-1].state : (stateTimeline.length>0? stateTimeline[0].state : (stateTypes && stateTypes.length>0? stateTypes[0] : 'EDGE'));
     const nextStateVal = (insertIdx < stateTimeline.length && stateTimeline[insertIdx])? stateTimeline[insertIdx].state : null;
-    const newState = prevState === 'EDGE' ? 'CENTER' : 'EDGE';
+    let newState = null;
+    if(stateTypes && Array.isArray(stateTypes) && stateTypes.length>0){
+      const curIdx = Math.max(0, stateTypes.indexOf(prevState));
+      newState = stateTypes[(curIdx + 1) % stateTypes.length];
+    } else {
+      newState = prevState === 'EDGE' ? 'CENTER' : 'EDGE';
+    }
     // validate within session end
     const end = sessionEnd();
     if(t > end + 1e-6){ alert('New time is after configured session end; adjust duration or choose a different time.'); return; }
@@ -542,11 +567,21 @@
               // remove this and all following entries
               stateTimeline.splice(idx);
             } else if(choice === 'S'){
-              // remove only the selected entry, then flip all remaining future states
+              // remove only the selected entry, then advance all remaining future states in sequence
               stateTimeline.splice(idx, 1);
-              for(let j = idx; j < stateTimeline.length; j++){
-                const s = stateTimeline[j];
-                if(s && typeof s.state === 'string') s.state = (s.state === 'EDGE' ? 'CENTER' : 'EDGE');
+              if(stateTypes && Array.isArray(stateTypes) && stateTypes.length>0){
+                for(let j = idx; j < stateTimeline.length; j++){
+                  const s = stateTimeline[j];
+                  if(s && typeof s.state === 'string'){
+                    const cur = stateTypes.indexOf(s.state);
+                    s.state = stateTypes[(cur + 1) % stateTypes.length];
+                  }
+                }
+              } else {
+                for(let j = idx; j < stateTimeline.length; j++){
+                  const s = stateTimeline[j];
+                  if(s && typeof s.state === 'string') s.state = (s.state === 'EDGE' ? 'CENTER' : 'EDGE');
+                }
               }
             }
             renderStateList(); saveAutosave();
@@ -955,7 +990,14 @@
     }).then(txt=>{
       try{
         const cfg = jsyaml.load(txt);
-        if(cfg && cfg.default_start) startStateSel.value = cfg.default_start;
+        // load state types from config and populate start state select
+        if(cfg && cfg.states && Array.isArray(cfg.states) && cfg.states.length>0){
+          stateTypes = cfg.states.map(item => (typeof item === 'string')? item : (item.name || String(item)));
+          try{
+            if(startStateSel){ startStateSel.innerHTML = ''; stateTypes.forEach(s=>{ const o = document.createElement('option'); o.textContent = s; o.value = s; startStateSel.appendChild(o); }); }
+          }catch(e){}
+        }
+        if(cfg && cfg.default_start){ try{ if(startStateSel) startStateSel.value = cfg.default_start; }catch(e){} }
         // load event types from config if provided (normalize to {name,key})
         if(cfg && cfg.events && Array.isArray(cfg.events) && cfg.events.length>0){
           eventTypes = cfg.events.map(item=>{
