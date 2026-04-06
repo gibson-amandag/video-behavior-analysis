@@ -3,6 +3,11 @@ default_start: CENTER
 states:
   - CENTER
   - EDGE
+additional_for_state:
+  CENTER:
+    - field: full_crossing
+      label: Full crossing
+      type: checkbox
 events:
   - name: GROOMING
     key: g

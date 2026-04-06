@@ -12,6 +12,7 @@
   let manualFlags = [];
   let eventTypes = null; // array of event type objects {name, key}
   let stateTypes = null; // array of state names from config
+  let additionalForState = {}; // map: stateName -> array of {field,label,type}
   const eventTableBodies = {}; // map: eventName -> tbody element
 
   // DOM
@@ -238,10 +239,11 @@
       if(!ok) return;
     }
     subjectInTime = +seconds().toFixed(33);
-    // initialize state timeline to start at the subject placement time
     try{
-      const startState = (startStateSel && startStateSel.value) ? startStateSel.value : 'EDGE';
-      stateTimeline = [{start: subjectInTime, state: startState}];
+      const startState = (startStateSel && startStateSel.value) ? startStateSel.value : (stateTypes && stateTypes.length>0? stateTypes[0] : 'EDGE');
+      const entry = {start: subjectInTime, state: startState};
+      try{ const descs = additionalForState[startState] || []; descs.forEach(d=>{ if(d.type === 'checkbox') entry[d.field] = false; else entry[d.field] = ''; }); }catch(e){}
+      stateTimeline = [entry];
     }catch(e){ stateTimeline = [{start: subjectInTime, state: 'EDGE'}]; }
     renderSubjectIn(); renderStateList();
     saveAutosave();
@@ -262,7 +264,9 @@
   if(setStartStateBtn){
     setStartStateBtn.addEventListener('click', ()=>{
       const s = startStateSel.value;
-      stateTimeline = [{start:0, state: s}];
+      const entry = {start:0, state: s};
+      try{ const descs = additionalForState[s] || []; descs.forEach(d=>{ if(d.type === 'checkbox') entry[d.field] = false; else entry[d.field] = ''; }); }catch(e){}
+      stateTimeline = [entry];
       renderStateList();
       saveAutosave();
     });
@@ -413,8 +417,10 @@
     // validate within session end
     const end = sessionEnd();
     if(t > end + 1e-6){ alert('New time is after configured session end; adjust duration or choose a different time.'); return; }
-    // insert
-    stateTimeline.splice(insertIdx, 0, {start: +t.toFixed(3), state: newState});
+    // insert (initialize any additional fields for this state)
+    const newEntry = {start: +t.toFixed(3), state: newState};
+    try{ const descs = additionalForState[newState] || []; descs.forEach(d=>{ if(d.type === 'checkbox') newEntry[d.field] = false; else newEntry[d.field] = ''; }); }catch(e){}
+    stateTimeline.splice(insertIdx, 0, newEntry);
     // check for duplicate adjacent states
     const conflictPrev = (insertIdx>0 && stateTimeline[insertIdx-1] && stateTimeline[insertIdx-1].state === newState);
     const conflictNext = (insertIdx+1 < stateTimeline.length && stateTimeline[insertIdx+1] && stateTimeline[insertIdx+1].state === newState);
@@ -443,6 +449,30 @@
 
   function renderStateList(){
     if(!stateTableBody) return;
+    // ensure header contains any configured additional columns
+    try{
+      const theadRow = document.querySelector('#stateTable thead tr');
+      if(theadRow){
+        // build ordered unique list of additional fields across all states
+        const allExtra = [];
+        const seen = new Set();
+        Object.keys(additionalForState || {}).forEach(st=>{
+          const arr = additionalForState[st] || [];
+          arr.forEach(desc=>{
+            if(!seen.has(desc.field)){
+              seen.add(desc.field);
+              allExtra.push(desc);
+            }
+          });
+        });
+        // insert headers for each extra descriptor before Duration column
+        allExtra.forEach((desc, idx)=>{
+          const label = desc.label || desc.field;
+          const present = Array.from(theadRow.children).some(th=> th.dataset && th.dataset.extraField === desc.field);
+          if(!present){ const th = document.createElement('th'); th.textContent = label; th.dataset.extraField = desc.field; if(theadRow.children.length >= 4) theadRow.insertBefore(th, theadRow.children[3 + idx]); else theadRow.appendChild(th); }
+        });
+      }
+    }catch(e){}
     stateTableBody.innerHTML = '';
     // compute session duration end time (subjectInTime + duration)
     let dur = null;
@@ -460,6 +490,31 @@
       const link = document.createElement('a'); link.href = '#'; link.textContent = formatTimeSec(a.start);
       link.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = a.start; video.pause(); }catch(e){} });
       tdStamp.appendChild(link);
+      // additional fields per-state (render cells for the union of configured extra fields)
+      const allExtraFields = [];
+      const seenFields = new Set();
+      Object.keys(additionalForState || {}).forEach(st=>{
+        (additionalForState[st]||[]).forEach(d=>{ if(!seenFields.has(d.field)){ seenFields.add(d.field); allExtraFields.push(d); } });
+      });
+      const extraTds = [];
+      allExtraFields.forEach(desc=>{
+        const tdExtra = document.createElement('td');
+        // if this row's state has a matching descriptor, render interactive control
+        const descriptorsForState = additionalForState[a.state] || [];
+        const match = descriptorsForState.find(dd=> dd.field === desc.field);
+        if(match){
+          if(match.type === 'checkbox'){
+            const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'form-check-input'; cb.checked = !!a[match.field];
+            cb.addEventListener('change', ()=>{ try{ stateTimeline[i][match.field] = !!cb.checked; saveAutosave(); }catch(e){} });
+            tdExtra.appendChild(cb);
+          } else {
+            tdExtra.textContent = a[match.field] !== undefined ? String(a[match.field]) : '—';
+          }
+        } else {
+          tdExtra.textContent = '—';
+        }
+        extraTds.push(tdExtra);
+      });
       const tdDur = document.createElement('td');
       let durVal = null;
       if(b && typeof b.start === 'number') durVal = b.start - a.start;
@@ -589,7 +644,9 @@
         });
         tdAct.appendChild(edit); tdAct.appendChild(del);
       }
-      tr.appendChild(tdState); tr.appendChild(tdAt); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
+      tr.appendChild(tdState); tr.appendChild(tdAt); tr.appendChild(tdStamp);
+      extraTds.forEach(td=> tr.appendChild(td));
+      tr.appendChild(tdDur); tr.appendChild(tdAct);
       stateTableBody.appendChild(tr);
     }
     // update current state display whenever timeline re-renders
@@ -879,7 +936,12 @@
     // compute state timeline with end times
     const states = stateTimeline.map((s,i)=>{
       const next = stateTimeline[i+1];
-      return {start: s.start, end: next? next.start : (duration||null), state: s.state};
+      const out = {start: s.start, end: next? next.start : (duration||null), state: s.state};
+      // include any extra fields configured or present on the entry (exclude internal flags)
+      Object.keys(s).forEach(k=>{
+        if(!['start','state','manual_flag'].includes(k)) out[k] = s[k];
+      });
+      return out;
     });
     // compute session end if subject placed
     let session_end = null;
@@ -940,8 +1002,12 @@
     try{
       // states
       if(parsed.state_timeline && Array.isArray(parsed.state_timeline)){
-        // convert canonical states (start,end,state) -> internal stateTimeline (start,state)
-        stateTimeline = parsed.state_timeline.map(s=>({start: s.start, state: s.state}));
+        // convert canonical states -> internal stateTimeline (preserve extra fields)
+        stateTimeline = parsed.state_timeline.map(s=>{
+          const obj = {start: s.start, state: s.state};
+          Object.keys(s).forEach(k=>{ if(!['start','end','state'].includes(k)) obj[k] = s[k]; });
+          return obj;
+        });
       }else if(parsed.stateTimeline && Array.isArray(parsed.stateTimeline)){
         stateTimeline = parsed.stateTimeline.slice();
       }
@@ -998,6 +1064,22 @@
           }catch(e){}
         }
         if(cfg && cfg.default_start){ try{ if(startStateSel) startStateSel.value = cfg.default_start; }catch(e){} }
+        // additional per-state fields: prefer explicit mapping
+        if(cfg && cfg.additional_for_state && typeof cfg.additional_for_state === 'object'){
+          // normalize mapping: state -> array of descriptors {field,label,type}
+          Object.keys(cfg.additional_for_state).forEach(st=>{
+            const v = cfg.additional_for_state[st];
+            if(Array.isArray(v)){
+              additionalForState[st] = v.map(item => (typeof item === 'string')? {field: item, label: item, type: 'checkbox'} : { field: item.field || item.name || item.label || String(item), label: item.label || item.name || item.field || String(item), type: item.type || 'checkbox' });
+            } else if(typeof v === 'object'){
+              const item = v;
+              const desc = { field: item.field || item.name || item.label || String(item), label: item.label || item.name || item.field || String(item), type: item.type || 'checkbox' };
+              additionalForState[st] = [desc];
+            } else if(typeof v === 'string'){
+              additionalForState[st] = [{field: v, label: v, type: 'checkbox'}];
+            }
+          });
+        }
         // load event types from config if provided (normalize to {name,key})
         if(cfg && cfg.events && Array.isArray(cfg.events) && cfg.events.length>0){
           eventTypes = cfg.events.map(item=>{
@@ -1029,6 +1111,6 @@
   try{ video.addEventListener('timeupdate', updateCurrentStateDisplay); }catch(e){}
 
   // expose for debugging
-  window._oft = {stateTimeline, eventTimeline, buildOutput};
+  window._oft = {stateTimeline, eventTimeline, buildOutput, stateTypes, eventTypes, additionalForState};
 
 })();
