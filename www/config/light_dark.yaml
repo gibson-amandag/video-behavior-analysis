@@ -3,7 +3,6 @@ default_start: DARK
 states:
   - DARK
   - LIGHT
-additional_for_state:
 events:
   - name: GROOMING
     key: g
@@ -14,4 +13,4 @@ events:
 colors:
   DARK: '#ffeeaa'
   LIGHT: '#dddddd'
-
+duration: 300

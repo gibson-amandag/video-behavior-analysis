@@ -16,3 +16,4 @@ events:
 colors:
   CENTER: '#ffeeaa'
   EDGE: '#dddddd'
+duration: 600

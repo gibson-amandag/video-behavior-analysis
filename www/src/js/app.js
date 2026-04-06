@@ -13,6 +13,7 @@
   let eventTypes = null; // array of event type objects {name, key}
   let stateTypes = null; // array of state names from config
   let additionalForState = {}; // map: stateName -> array of {field,label,type}
+  let DEFAULT_DURATION = 600;
   const eventTableBodies = {}; // map: eventName -> tbody element
 
   // DOM
@@ -49,7 +50,7 @@
   function sessionEnd(){
     if(subjectInTime === null) return Infinity;
     const pd = (videoDurInput && videoDurInput.value) ? parseFloat(videoDurInput.value) : 600;
-    return subjectInTime + (Number.isNaN(pd)? 600 : pd);
+    return subjectInTime + (Number.isNaN(pd)? DEFAULT_DURATION : pd);
   }
 
   function showConflictModal(message, choices, cb){
@@ -930,8 +931,8 @@
   });
 
   function buildOutput(){
-    // prefer user-provided duration if present, otherwise default to 600s
-    let duration = 600;
+    // prefer user-provided duration if present, otherwise default to configured default
+    let duration = DEFAULT_DURATION;
     if(videoDurInput && videoDurInput.value){
       const parsed = parseFloat(videoDurInput.value);
       if(!Number.isNaN(parsed)) duration = parsed;
@@ -1071,6 +1072,8 @@
 
   // load config (yaml) if served via http(s). If not available, ignore.
   function loadConfig(){
+    // reset previous config-derived globals so switching tasks clears old options/columns
+    try{ additionalForState = {}; stateTypes = []; eventTypes = null; if(startStateSel) startStateSel.innerHTML = ''; if(eventTypeSel) eventTypeSel.innerHTML = ''; }catch(e){}
     fetch(TASK_CONFIG).then(r=>{
       if(!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.text();
@@ -1085,6 +1088,10 @@
           }catch(e){}
         }
         if(cfg && cfg.default_start){ try{ if(startStateSel) startStateSel.value = cfg.default_start; }catch(e){} }
+        // set default duration from config if provided
+        if(cfg && typeof cfg.duration !== 'undefined'){
+          try{ DEFAULT_DURATION = Number(cfg.duration) || DEFAULT_DURATION; if(videoDurInput) videoDurInput.value = DEFAULT_DURATION; }catch(e){}
+        }
         // additional per-state fields: prefer explicit mapping
         if(cfg && cfg.additional_for_state && typeof cfg.additional_for_state === 'object'){
           // normalize mapping: state -> array of descriptors {field,label,type}
