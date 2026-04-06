@@ -228,6 +228,11 @@
     saveAutosave();
   }); }
   if(clearInBtn){ clearInBtn.addEventListener('click', ()=>{
+    // If there are existing annotations, confirm before clearing
+    if((stateTimeline && stateTimeline.length>0) || (eventTimeline && eventTimeline.length>0)){
+      const ok = confirm('There are existing annotations. Clearing subject start will reset timelines and remove existing entries. Continue?');
+      if(!ok) return;
+    }
     subjectInTime = null;
     // clear state timeline because timeline must begin at subject placement
     stateTimeline = [];
