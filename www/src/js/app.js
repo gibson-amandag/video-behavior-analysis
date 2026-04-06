@@ -449,6 +449,15 @@
     // validate within session end
     const end = sessionEnd();
     if(t > end + 1e-6){ alert('New time is after configured session end; adjust duration or choose a different time.'); return; }
+    // For multi-state tasks (3+ states) prevent creating consecutive identical states.
+    if(stateTypes && stateTypes.length >= 3){
+      const nextStateVal = (insertIdx < stateTimeline.length && stateTimeline[insertIdx])? stateTimeline[insertIdx].state : null;
+      if((insertIdx>0 && stateTimeline[insertIdx-1] && stateTimeline[insertIdx-1].state === newState) || (nextStateVal && nextStateVal === newState)){
+        try{ video.pause(); }catch(e){}
+        alert('Cannot add state: would create two identical consecutive states. Choose a different time or state.');
+        return;
+      }
+    }
     // insert (initialize any additional fields for this state)
     const newEntry = {start: +t.toFixed(3), state: newState};
     try{ const descs = additionalForState[newState] || []; descs.forEach(d=>{ if(d.type === 'checkbox') newEntry[d.field] = false; else newEntry[d.field] = ''; }); }catch(e){}
@@ -456,7 +465,13 @@
     // check for duplicate adjacent states
     const conflictPrev = (insertIdx>0 && stateTimeline[insertIdx-1] && stateTimeline[insertIdx-1].state === newState);
     const conflictNext = (insertIdx+1 < stateTimeline.length && stateTimeline[insertIdx+1] && stateTimeline[insertIdx+1].state === newState);
-    if(conflictPrev || conflictNext){ handleConflict(insertIdx); }
+    // For multi-state tasks (3+ states) we allow additions without invoking
+    // the full conflict modal; only for 2-state tasks do we present conflict resolution.
+    if(conflictPrev || conflictNext){
+      if(!(stateTypes && stateTypes.length >= 3)){
+        handleConflict(insertIdx);
+      }
+    }
     renderStateList(); saveAutosave();
   });
 
@@ -470,12 +485,26 @@
     // validate within session end
     const end = sessionEnd();
     if(time > end + 1e-6){ alert('New time is after configured session end; adjust duration or choose a different time.'); return; }
+    // For multi-state tasks (3+ states) prevent creating consecutive identical states.
+    if(stateTypes && stateTypes.length >= 3){
+      const nextState = (insertIdx < stateTimeline.length && stateTimeline[insertIdx])? stateTimeline[insertIdx].state : null;
+      if((insertIdx>0 && stateTimeline[insertIdx-1] && stateTimeline[insertIdx-1].state === desiredState) || (nextState && nextState === desiredState)){
+        try{ video.pause(); }catch(e){}
+        alert('Cannot add state: would create two identical consecutive states. Choose a different time or state.');
+        return;
+      }
+    }
     const newEntry = {start: +time.toFixed(3), state: desiredState};
     try{ const descs = additionalForState[desiredState] || []; descs.forEach(d=>{ if(d.type === 'checkbox') newEntry[d.field] = false; else newEntry[d.field] = ''; }); }catch(e){}
     stateTimeline.splice(insertIdx, 0, newEntry);
     const conflictPrev = (insertIdx>0 && stateTimeline[insertIdx-1] && stateTimeline[insertIdx-1].state === desiredState);
     const conflictNext = (insertIdx+1 < stateTimeline.length && stateTimeline[insertIdx+1] && stateTimeline[insertIdx+1].state === desiredState);
-    if(conflictPrev || conflictNext){ handleConflict(insertIdx); }
+    // For multi-state tasks (3+ states) allow insertion without complex conflict flow.
+    if(conflictPrev || conflictNext){
+      if(!(stateTypes && stateTypes.length >= 3)){
+        handleConflict(insertIdx);
+      }
+    }
     renderStateList(); saveAutosave();
   }
 
@@ -665,41 +694,49 @@
             }
             return;
           }
-          // intermediary entry: prompt user with options
-          const msg = `Delete state at ${formatTimeSec(stateTimeline[idx].start)} — choose action:`;
-          const choices = [
-            {key:'D', label: 'Delete selected + next'},
-            {key:'S', label: 'Delete selected + swap future'},
-            {key:'A', label: 'Delete all future entries (from here)'}
-          ];
-          showConflictModal(msg, choices, (choice)=>{
-            if(!choice) return;
-            if(choice === 'D'){
-              // remove this and the immediate next
-              stateTimeline.splice(idx, Math.min(2, stateTimeline.length - idx));
-            } else if(choice === 'A'){
-              // remove this and all following entries
-              stateTimeline.splice(idx);
-            } else if(choice === 'S'){
-              // remove only the selected entry, then advance all remaining future states in sequence
+          // For multi-state tasks (3+ states) use a simple confirm for deletions.
+          if(stateTypes && stateTypes.length >= 3){
+            if(confirm(`Delete state at ${formatTimeSec(stateTimeline[idx].start)}?`)){
               stateTimeline.splice(idx, 1);
-              if(stateTypes && Array.isArray(stateTypes) && stateTypes.length>0){
-                for(let j = idx; j < stateTimeline.length; j++){
-                  const s = stateTimeline[j];
-                  if(s && typeof s.state === 'string'){
-                    const cur = stateTypes.indexOf(s.state);
-                    s.state = stateTypes[(cur + 1) % stateTypes.length];
+              renderStateList(); saveAutosave();
+            }
+          } else {
+            // intermediary entry: prompt user with options
+            const msg = `Delete state at ${formatTimeSec(stateTimeline[idx].start)} — choose action:`;
+            const choices = [
+              {key:'D', label: 'Delete selected + next'},
+              {key:'S', label: 'Delete selected + swap future'},
+              {key:'A', label: 'Delete all future entries (from here)'}
+            ];
+            showConflictModal(msg, choices, (choice)=>{
+              if(!choice) return;
+              if(choice === 'D'){
+                // remove this and the immediate next
+                stateTimeline.splice(idx, Math.min(2, stateTimeline.length - idx));
+              } else if(choice === 'A'){
+                // remove this and all following entries
+                stateTimeline.splice(idx);
+              } else if(choice === 'S'){
+                // remove only the selected entry, then advance all remaining future states in sequence
+                stateTimeline.splice(idx, 1);
+                if(stateTypes && Array.isArray(stateTypes) && stateTypes.length>0){
+                  for(let j = idx; j < stateTimeline.length; j++){
+                    const s = stateTimeline[j];
+                    if(s && typeof s.state === 'string'){
+                      const cur = stateTypes.indexOf(s.state);
+                      s.state = stateTypes[(cur + 1) % stateTypes.length];
+                    }
+                  }
+                } else {
+                  for(let j = idx; j < stateTimeline.length; j++){
+                    const s = stateTimeline[j];
+                    if(s && typeof s.state === 'string') s.state = (s.state === 'EDGE' ? 'CENTER' : 'EDGE');
                   }
                 }
-              } else {
-                for(let j = idx; j < stateTimeline.length; j++){
-                  const s = stateTimeline[j];
-                  if(s && typeof s.state === 'string') s.state = (s.state === 'EDGE' ? 'CENTER' : 'EDGE');
-                }
               }
-            }
-            renderStateList(); saveAutosave();
-          });
+              renderStateList(); saveAutosave();
+            });
+          }
         });
         tdAct.appendChild(edit); tdAct.appendChild(del);
       }
