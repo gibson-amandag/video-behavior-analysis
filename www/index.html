@@ -116,7 +116,7 @@
         <div class="col-6">
           <ul class="mb-0">
             <li><strong>Place subject:</strong> <kbd>p</kbd> = mark subject start time</li>
-            <li><strong>Events:</strong> <kbd>g</kbd> = start/stop GROOMING, <kbd>r</kbd> = start/stop REARING</li>
+            <li id="keystrokesEvents"><strong>Events:</strong> <span class="small text-muted">(loading)</span></li>
             <li><strong>State:</strong> <kbd>v</kbd> = add state transition (switch state)</li>
             <li><strong>Back to last state:</strong> <kbd>b</kbd> = go back to the last recorded state</li>
           </ul>
@@ -159,18 +159,7 @@
       </table>
 
       <h2>Event Timeline</h2>
-      <table class="table table-sm" id="eventTable">
-        <thead>
-          <tr>
-            <th>Event</th>
-            <th>Start (s)</th>
-            <th>Time stamp</th>
-            <th>Duration (s)</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="eventTableBody"></tbody>
-      </table>
+      <div id="eventTablesContainer"></div>
     </section>
 
     <section class="exports mt-3">

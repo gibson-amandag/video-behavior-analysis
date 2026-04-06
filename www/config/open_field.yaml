@@ -4,8 +4,10 @@ states:
   - CENTER
   - EDGE
 events:
-  - GROOMING
-  - REARING
+  - name: GROOMING
+    key: g
+  - name: REARING
+    key: r
 colors:
   CENTER: '#ffeeaa'
   EDGE: '#dddddd'

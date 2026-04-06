@@ -10,6 +10,8 @@
   let subjectInTime = null; // seconds when subject placed in apparatus
   let savedAutosave = null; // raw autosave stash (do not auto-apply)
   let manualFlags = [];
+  let eventTypes = null; // array of event type objects {name, key}
+  const eventTableBodies = {}; // map: eventName -> tbody element
 
   // DOM
   const videoFile = document.getElementById('videoFile');
@@ -26,7 +28,7 @@
   const stepInput = document.getElementById('stepSize');
   const addStateBtn = document.getElementById('addState');
   const stateTableBody = document.getElementById('stateTableBody');
-  const eventTableBody = document.getElementById('eventTableBody');
+  const eventTablesContainer = document.getElementById('eventTablesContainer');
   const startEventBtn = document.getElementById('startEvent');
   const stopEventBtn = document.getElementById('stopEvent');
   const eventTypeSel = document.getElementById('eventType');
@@ -36,6 +38,8 @@
   const importJsonFile = document.getElementById('importJsonFile');
   const setStartStateBtn = document.getElementById('setStartState');
   const startStateSel = document.getElementById('startState');
+
+  
 
   function seconds(){ return video.currentTime || 0; }
 
@@ -330,9 +334,18 @@
       e.preventDefault();
     }
 
-    // events: toggle grooming / rearing
-    if(e.key === 'g'){ toggleEventByName('GROOMING'); }
-    if(e.key === 'r'){ toggleEventByName('REARING'); }
+    // events: toggle by configured keys
+    try{
+      if(eventTypes && eventTypes.length){
+        const pressed = (e.key || '').toLowerCase();
+        for(let ii=0; ii<eventTypes.length; ii++){
+          const ev = eventTypes[ii];
+          const key = (typeof ev === 'string') ? null : (ev.key || null);
+          const name = (typeof ev === 'string') ? ev : (ev.name || ev.event || '');
+          if(key && key.toLowerCase() === pressed){ toggleEventByName(name); e.preventDefault(); break; }
+        }
+      }
+    }catch(err){}
 
     // state switch
     if(e.key === 'v'){ if(addStateBtn) addStateBtn.click(); }
@@ -543,12 +556,77 @@
     try{ updateCurrentStateDisplay(); }catch(e){}
   }
 
+  function ensureEventTables(){
+    if(!eventTablesContainer) return;
+    // determine eventTypes if not yet set: prefer config-driven, else use select options
+    if(!eventTypes){
+      if(eventTypeSel && eventTypeSel.options && eventTypeSel.options.length>0){
+        eventTypes = Array.from(eventTypeSel.options).map(o=>({name: o.textContent.trim(), key: (o.dataset && o.dataset.key)? o.dataset.key : null}));
+      } else {
+        eventTypes = [{name:'GROOMING', key:'g'}, {name:'REARING', key:'r'}];
+      }
+    }
+    // clear container and build table per event type
+    eventTablesContainer.innerHTML = '';
+    for(const k in eventTableBodies) delete eventTableBodies[k];
+    eventTypes.forEach(evObj=>{
+      const evName = (typeof evObj === 'string') ? evObj : (evObj.name || (evObj.event || ''));
+      const safe = evName.replace(/[^a-z0-9]/ig,'_');
+      const tbl = document.createElement('table'); tbl.className = 'table table-sm mb-3';
+      const thead = document.createElement('thead'); thead.innerHTML = `<tr><th>Event</th><th>Start (s)</th><th>Time stamp</th><th>Duration (s)</th><th></th></tr>`;
+      const tbody = document.createElement('tbody'); tbody.id = `eventTableBody_${safe}`;
+      tbl.appendChild(thead); tbl.appendChild(tbody);
+      const h = document.createElement('h3'); h.textContent = `${evName} Events`;
+      eventTablesContainer.appendChild(h); eventTablesContainer.appendChild(tbl);
+      eventTableBodies[evName] = tbody;
+    });
+    try{ renderKeystrokes(); }catch(e){}
+  }
+
+  function renderKeystrokes(){
+    try{
+      const holder = document.getElementById('keystrokesEvents');
+      if(!holder) return;
+      // build list of mappings
+      const parts = [];
+      if(eventTypes && eventTypes.length>0){
+        eventTypes.forEach(ev=>{
+          const name = (typeof ev==='string')? ev : (ev.name || ev.event);
+          const key = (typeof ev==='string')? null : (ev.key || null);
+          if(key){
+            const k = document.createElement('kbd'); k.textContent = key;
+            const span = document.createElement('span'); span.className = 'ms-1 me-2'; span.appendChild(k); span.appendChild(document.createTextNode(` = start/stop ${name}`));
+            parts.push(span);
+          } else {
+            parts.push(document.createTextNode(`${name}`));
+          }
+        });
+      }
+      holder.innerHTML = '';
+      const strong = document.createElement('strong'); strong.textContent = 'Events:';
+      holder.appendChild(strong);
+      const wrap = document.createElement('span'); wrap.className = 'ms-1';
+      parts.forEach(p=> wrap.appendChild(p));
+      holder.appendChild(wrap);
+    }catch(e){}
+  }
+
   function renderEventList(){
-    if(!eventTableBody) return;
-    eventTableBody.innerHTML = '';
-    // active events (show first)
+    if(!eventTablesContainer) return;
+    // ensure tables exist
+    ensureEventTables();
+    // prepare mapping for finished events by type
+    const finishedByType = {};
+    eventTimeline.forEach((e, idx)=>{
+      if(!finishedByType[e.event]) finishedByType[e.event] = [];
+      finishedByType[e.event].push({entry: e, idx});
+    });
+    // clear all tbodies
+    Object.keys(eventTableBodies).forEach(k=>{ const tb = eventTableBodies[k]; if(tb) tb.innerHTML = ''; });
+    // render active events first under their type
     Object.keys(activeEvents).forEach(evName=>{
       const start = activeEvents[evName];
+      const tbody = eventTableBodies[evName] || null;
       const tr = document.createElement('tr');
       const tdEvent = document.createElement('td'); tdEvent.textContent = evName + ' (active)';
       const tdStart = document.createElement('td'); tdStart.textContent = (typeof start==='number')? start.toFixed(3) : '—';
@@ -564,26 +642,30 @@
       seekBtn.addEventListener('click', ()=>{ try{ video.currentTime = start; video.pause(); }catch(e){} });
       tdAct.appendChild(stopBtn); tdAct.appendChild(seekBtn);
       tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
-      eventTableBody.appendChild(tr);
+      if(tbody) tbody.appendChild(tr);
     });
-    // finished events
-    for(let i=0;i<eventTimeline.length;i++){
-      const e = eventTimeline[i];
-      const tr = document.createElement('tr');
-      const tdEvent = document.createElement('td'); tdEvent.textContent = e.event;
-      const tdStart = document.createElement('td'); tdStart.textContent = (typeof e.start === 'number')? e.start.toFixed(3) : '—';
-      const tdStamp = document.createElement('td');
-      const link = document.createElement('a'); link.href='#'; link.textContent = formatTimeSec(e.start);
-      link.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = e.start; video.pause(); }catch(err){} });
-      tdStamp.appendChild(link);
-      const tdDur = document.createElement('td'); tdDur.textContent = ((typeof e.end==='number' && typeof e.start==='number')? (e.end - e.start).toFixed(3) : '—');
-      const tdAct = document.createElement('td');
-      const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
-      del.addEventListener('click', ()=>{ eventTimeline.splice(i,1); renderEventList(); saveAutosave(); });
-      tdAct.appendChild(del);
-      tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
-      eventTableBody.appendChild(tr);
-    }
+    // render finished events grouped by type
+    Object.keys(finishedByType).forEach(evName=>{
+      const list = finishedByType[evName];
+      const tbody = eventTableBodies[evName] || null;
+      list.forEach(item=>{
+        const e = item.entry;
+        const tr = document.createElement('tr');
+        const tdEvent = document.createElement('td'); tdEvent.textContent = e.event;
+        const tdStart = document.createElement('td'); tdStart.textContent = (typeof e.start === 'number')? e.start.toFixed(3) : '—';
+        const tdStamp = document.createElement('td');
+        const link = document.createElement('a'); link.href='#'; link.textContent = formatTimeSec(e.start);
+        link.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = e.start; video.pause(); }catch(err){} });
+        tdStamp.appendChild(link);
+        const tdDur = document.createElement('td'); tdDur.textContent = ((typeof e.end==='number' && typeof e.start==='number')? (e.end - e.start).toFixed(3) : '—');
+        const tdAct = document.createElement('td');
+        const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
+        del.addEventListener('click', ()=>{ const idx = eventTimeline.indexOf(e); if(idx!==-1) eventTimeline.splice(idx,1); renderEventList(); saveAutosave(); });
+        tdAct.appendChild(del);
+        tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
+        if(tbody) tbody.appendChild(tr);
+      });
+    });
   }
 
   exportJsonBtn.addEventListener('click', ()=>{
@@ -745,15 +827,38 @@
 
   // load config (yaml) if served via http(s). If not available, ignore.
   function loadConfig(){
-    fetch(TASK_CONFIG).then(r=>r.text()).then(txt=>{
-      try{ const cfg = jsyaml.load(txt); // not used extensively yet
+    fetch(TASK_CONFIG).then(r=>{
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.text();
+    }).then(txt=>{
+      try{
+        const cfg = jsyaml.load(txt);
         if(cfg && cfg.default_start) startStateSel.value = cfg.default_start;
-      }catch(e){}
-    }).catch(()=>{});
+        // load event types from config if provided (normalize to {name,key})
+        if(cfg && cfg.events && Array.isArray(cfg.events) && cfg.events.length>0){
+          eventTypes = cfg.events.map(item=>{
+            if(typeof item === 'string') return {name: item, key: null};
+            if(typeof item === 'object') return {name: item.name || item.event || String(item), key: item.key || item.k || null};
+            return {name: String(item), key: null};
+          });
+          // populate eventType select if present
+          try{ if(eventTypeSel){ eventTypeSel.innerHTML = ''; eventTypes.forEach(ev=>{ const o = document.createElement('option'); o.textContent = ev.name; if(ev.key) o.dataset.key = ev.key; eventTypeSel.appendChild(o); }); } }catch(e){}
+          // build per-event tables now that we have types
+          try{ ensureEventTables(); renderEventList(); }catch(e){}
+        } else {
+          // events not present in config; fall back to select/defaults
+        }
+      }catch(e){
+        // parsing failed; ignore and continue with defaults
+      }
+    }).catch(err=>{
+      // failed to fetch config; ignore and continue with defaults
+    });
   }
 
   // init
   loadAutosave();
+  try{ ensureEventTables(); renderEventList(); }catch(e){}
   loadConfig();
 
   // update current state as video plays/seeks
