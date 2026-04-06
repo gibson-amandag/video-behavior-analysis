@@ -578,7 +578,7 @@
       const evName = (typeof evObj === 'string') ? evObj : (evObj.name || (evObj.event || ''));
       const safe = evName.replace(/[^a-z0-9]/ig,'_');
       const tbl = document.createElement('table'); tbl.className = 'table table-sm mb-3';
-      const thead = document.createElement('thead'); thead.innerHTML = `<tr><th>Event</th><th>Start (s)</th><th>Time stamp</th><th>Duration (s)</th><th></th></tr>`;
+      const thead = document.createElement('thead'); thead.innerHTML = `<tr><th>Event</th><th>Start (s)</th><th>Start stamp</th><th>End (s)</th><th>End stamp</th><th>Duration (s)</th><th></th></tr>`;
       const tbody = document.createElement('tbody'); tbody.id = `eventTableBody_${safe}`;
       tbl.appendChild(thead); tbl.appendChild(tbody);
       const h = document.createElement('h3'); h.textContent = `${evName} Events`;
@@ -639,6 +639,8 @@
       const link = document.createElement('a'); link.href = '#'; link.textContent = formatTimeSec(start);
       link.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = start; video.pause(); }catch(e){} });
       tdStamp.appendChild(link);
+      const tdEnd = document.createElement('td'); tdEnd.textContent = 'active';
+      const tdEndStamp = document.createElement('td'); tdEndStamp.textContent = '—';
       const tdDur = document.createElement('td'); tdDur.textContent = 'active';
       const tdAct = document.createElement('td');
       const stopBtn = document.createElement('button'); stopBtn.className = 'btn btn-sm btn-warning me-1'; stopBtn.textContent = 'Stop';
@@ -646,7 +648,7 @@
       const seekBtn = document.createElement('button'); seekBtn.className = 'btn btn-sm btn-secondary'; seekBtn.textContent = 'Seek';
       seekBtn.addEventListener('click', ()=>{ try{ video.currentTime = start; video.pause(); }catch(e){} });
       tdAct.appendChild(stopBtn); tdAct.appendChild(seekBtn);
-      tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
+      tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdEnd); tr.appendChild(tdEndStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
       if(tbody) tbody.appendChild(tr);
     });
     // render finished events grouped by type
@@ -662,12 +664,19 @@
         const link = document.createElement('a'); link.href='#'; link.textContent = formatTimeSec(e.start);
         link.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = e.start; video.pause(); }catch(err){} });
         tdStamp.appendChild(link);
+        const tdEnd = document.createElement('td'); tdEnd.textContent = (typeof e.end === 'number')? e.end.toFixed(3) : '—';
+        const tdEndStamp = document.createElement('td');
+        if(typeof e.end === 'number'){
+          const endLink = document.createElement('a'); endLink.href = '#'; endLink.textContent = formatTimeSec(e.end);
+          endLink.addEventListener('click', (ev)=>{ ev.preventDefault(); try{ video.currentTime = e.end; video.pause(); }catch(err){} });
+          tdEndStamp.appendChild(endLink);
+        } else { tdEndStamp.textContent = '—'; }
         const tdDur = document.createElement('td'); tdDur.textContent = ((typeof e.end==='number' && typeof e.start==='number')? (e.end - e.start).toFixed(3) : '—');
         const tdAct = document.createElement('td');
         const del = document.createElement('button'); del.className = 'btn btn-sm btn-outline-danger'; del.textContent='Delete';
         del.addEventListener('click', ()=>{ const idx = eventTimeline.indexOf(e); if(idx!==-1) eventTimeline.splice(idx,1); renderEventList(); saveAutosave(); });
         tdAct.appendChild(del);
-        tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
+        tr.appendChild(tdEvent); tr.appendChild(tdStart); tr.appendChild(tdStamp); tr.appendChild(tdEnd); tr.appendChild(tdEndStamp); tr.appendChild(tdDur); tr.appendChild(tdAct);
         if(tbody) tbody.appendChild(tr);
       });
     });
