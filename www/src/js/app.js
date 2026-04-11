@@ -16,6 +16,15 @@
   let stateKeyMap = {};
   let DEFAULT_DURATION = 600;
   const eventTableBodies = {}; // map: eventName -> tbody element
+  // Known task -> abbreviation mapping (derived from config YAMLs)
+  const TASK_ABBREV_MAP = {
+    open_field: 'OFT',
+    light_dark: 'LD',
+    elevated_plus: 'EPM'
+  };
+  // When true, a task change was initiated automatically (e.g. from filename detection)
+  // and the change handler should not clear the currently selected video/file.
+  let suppressClearOnTaskSwitch = false;
 
   // DOM
   const videoFile = document.getElementById('videoFile');
@@ -237,6 +246,23 @@
     video.src = URL.createObjectURL(f);
     video.dataset.filename = f.name;
     if(videoFileDisplay) videoFileDisplay.textContent = `File: ${f.name}`;
+    // try to auto-select task type based on filename (match known abbreviations or task names)
+    try{
+      const fname = (f.name || '').toLowerCase();
+      let matched = null;
+      Object.keys(TASK_ABBREV_MAP).forEach(task =>{
+        try{
+          const ab = String(TASK_ABBREV_MAP[task] || '').toLowerCase();
+          const taskLower = String(task || '').toLowerCase();
+          if(!ab) return;
+          if(fname.includes(ab) || fname.includes(taskLower) || fname.includes(taskLower.replace('_',''))){ matched = task; }
+        }catch(e){}
+      });
+      if(matched){
+        if(taskTypeSel){ try{ suppressClearOnTaskSwitch = true; taskTypeSel.value = matched; taskTypeSel.dispatchEvent(new Event('change')); }catch(e){} }
+        else { TASK_CONFIG = `config/${matched}.yaml`; try{ loadConfig(); }catch(e){} }
+      }
+    }catch(e){}
     // apply selected playback speed when loading a file
     const sp = parseFloat(changeSpeed && changeSpeed.value) || 1.0;
     video.playbackRate = sp;
@@ -1278,6 +1304,14 @@
       try{ previousTaskVal = (taskTypeSel && taskTypeSel.value) ? taskTypeSel.value : (TASK_CONFIG.split('/').pop().replace('.yaml','')); }catch(e){}
       taskTypeSel.addEventListener('change', ()=>{
         const newTask = taskTypeSel.value;
+        // If this change was initiated automatically (filename detection), do a silent switch
+        if(suppressClearOnTaskSwitch){
+          suppressClearOnTaskSwitch = false;
+          previousTaskVal = newTask;
+          TASK_CONFIG = `config/${newTask}.yaml`;
+          try{ loadConfig(); ensureEventTables(); renderEventList(); renderStateList(); saveAutosave(); }catch(e){}
+          return;
+        }
         // if unchanged or we have no previous value, just switch
         if(!previousTaskVal || previousTaskVal === newTask){ previousTaskVal = newTask; TASK_CONFIG = `config/${newTask}.yaml`; try{ loadConfig(); ensureEventTables(); renderEventList(); renderStateList(); }catch(e){}; return; }
 
