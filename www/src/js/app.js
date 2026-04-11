@@ -255,6 +255,17 @@
     if(videoFileDisplay) videoFileDisplay.textContent = `File: ${f.name}`;
 
     const handleFileAccepted = ()=>{
+        // If the selected file is different from the previously loaded file,
+      // clear testing/session metadata so it doesn't persist across files.
+      try{
+        if(prevDatasetFilename && prevDatasetFilename !== f.name){
+          try{ if(document.getElementById('scorer')) document.getElementById('scorer').value = ''; }catch(e){}
+          try{ if(document.getElementById('subjectId')) document.getElementById('subjectId').value = ''; }catch(e){}
+          try{ if(document.getElementById('date')) document.getElementById('date').value = ''; }catch(e){}
+          try{ if(document.getElementById('time')) document.getElementById('time').value = ''; }catch(e){}
+        }
+      }catch(e){}
+      
       // try to auto-select task type based on filename (match known abbreviations or task names)
       try{
         const fname = (f.name || '').toLowerCase();
@@ -296,14 +307,35 @@
               if(time){ try{ if(document.getElementById('time') && !document.getElementById('time').value) document.getElementById('time').value = time; }catch(e){} }
               return;
             }
-            // Pattern: YYYYMMDD_SUBJ_...
+            // Pattern: YYYYMMDD_SUBJ_... (allow additional suffix like _OFT/_oft after subject)
             if(/^[0-9]{8}_/.test(base)){
-              const m = base.match(/^([0-9]{8})_([A-Za-z0-9-]+)/);
-              if(m){ const d8 = m[1]; const subj = m[2]; const date = `${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}`;
+              const tokens = base.split('_');
+              if(tokens.length >= 2 && /^[0-9]{8}$/.test(tokens[0])){
+                const d8 = tokens[0];
+                const subj = tokens[1];
+                const date = `${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}`;
                 try{ if(document.getElementById('subjectId') && !document.getElementById('subjectId').value) document.getElementById('subjectId').value = subj; }catch(e){}
                 try{ if(document.getElementById('date') && !document.getElementById('date').value) document.getElementById('date').value = date; }catch(e){}
-                return; }
+                return;
+              }
             }
+
+            // Pattern: YYYY-MM-DD-<SUFFIX>_... e.g. 2025-09-29-1914_OFT.MP4
+            // capture date and the next hyphenated token as subject (also set time if token looks like HHMM)
+            try{
+              const tok0 = base.split('_')[0];
+              const dm = tok0.match(/^([0-9]{4}-[0-9]{2}-[0-9]{2})-(.+)$/);
+              if(dm){
+                const date = dm[1];
+                const subjToken = dm[2];
+                // Treat the token after the date as the subject identifier.
+                // Do NOT interpret 4-digit tokens as time by default because
+                // subjects may be numeric of varying lengths (e.g., 1914).
+                try{ if(document.getElementById('subjectId') && !document.getElementById('subjectId').value) document.getElementById('subjectId').value = subjToken; }catch(e){}
+                try{ if(document.getElementById('date') && !document.getElementById('date').value) document.getElementById('date').value = date; }catch(e){}
+                return;
+              }
+            }catch(e){}
             // Pattern: YYYY-MM-DD_SUBJ_...
             const m2 = base.match(/^([0-9]{4}-[0-9]{2}-[0-9]{2})_([A-Za-z0-9-]+)/);
             if(m2){ const date = m2[1]; const subj = m2[2]; try{ if(document.getElementById('subjectId') && !document.getElementById('subjectId').value) document.getElementById('subjectId').value = subj; }catch(e){} try{ if(document.getElementById('date') && !document.getElementById('date').value) document.getElementById('date').value = date; }catch(e){} return; }
@@ -324,7 +356,10 @@
 
     try{
       const savedFile = (savedAutosave && savedAutosave.metadata && savedAutosave.metadata.video_file) ? String(savedAutosave.metadata.video_file) : null;
-      if(savedFile && savedFile !== f.name){
+      // Only warn if the current page already has annotations (i.e. autosave not just present in storage
+      // but not applied to the page). If the page is fresh (no annotations loaded), proceed silently.
+      const pageHasAnnotations = (stateTimeline && stateTimeline.length>0) || (eventTimeline && eventTimeline.length>0) || (subjectInTime !== null) || (activeEvents && Object.keys(activeEvents).length>0);
+      if(savedFile && savedFile !== f.name && pageHasAnnotations){
         const msg = `Selected file "${f.name}" differs from annotations saved for "${savedFile}". Proceeding may mismatch timestamps.`;
         const choices = [ {key:'E', label: 'Export & clear'}, {key:'L', label: 'Clear and load new file'}, {key:'C', label: 'Cancel file selection'} ];
           showConflictModal(msg, choices, (choice)=>{
@@ -1205,7 +1240,7 @@
     const shortMap = { 'open_field': 'OFT', 'light_dark': 'LD', 'elevated_plus': 'EPM' };
     const shortTag = shortMap[taskVal] || taskVal.toUpperCase();
     const out = {
-      session_id: `${document.getElementById('subjectId').value || 'subject'}_${shortTag}_${document.getElementById('date').value || new Date().toISOString().slice(0,10)}`,
+      session_id: `${document.getElementById('subjectId').value || 'subject'}_${shortTag}_${document.getElementById('date').value || new Date().toISOString().slice(0,10)}_${(document.getElementById('scorer') && document.getElementById('scorer').value) || 'scorer'}`,
       task: taskVal,
       duration_s: duration,
       subject: {species:'rat', id: document.getElementById('subjectId').value || ''},
