@@ -243,36 +243,64 @@
   videoFile.addEventListener('change', (e)=>{
     const f = e.target.files[0];
     if(!f) return;
-    video.src = URL.createObjectURL(f);
+    const blobUrl = URL.createObjectURL(f);
+    video.src = blobUrl;
     video.dataset.filename = f.name;
     if(videoFileDisplay) videoFileDisplay.textContent = `File: ${f.name}`;
-    // try to auto-select task type based on filename (match known abbreviations or task names)
+
+    const handleFileAccepted = ()=>{
+      // try to auto-select task type based on filename (match known abbreviations or task names)
+      try{
+        const fname = (f.name || '').toLowerCase();
+        let matched = null;
+        Object.keys(TASK_ABBREV_MAP).forEach(task =>{
+          try{
+            const ab = String(TASK_ABBREV_MAP[task] || '').toLowerCase();
+            const taskLower = String(task || '').toLowerCase();
+            if(!ab) return;
+            if(fname.includes(ab) || fname.includes(taskLower) || fname.includes(taskLower.replace('_',''))){ matched = task; }
+          }catch(e){}
+        });
+        if(matched){
+          if(taskTypeSel){ try{ suppressClearOnTaskSwitch = true; taskTypeSel.value = matched; taskTypeSel.dispatchEvent(new Event('change')); }catch(e){} }
+          else { TASK_CONFIG = `config/${matched}.yaml`; try{ loadConfig(); }catch(e){} }
+        }
+      }catch(e){}
+      // apply selected playback speed when loading a file
+      const sp = parseFloat(changeSpeed && changeSpeed.value) || 1.0;
+      video.playbackRate = sp;
+      // If there's a saved autosave that matches this video's filename, offer to restore it as a backup.
+      try{
+        if(savedAutosave && savedAutosave.metadata && savedAutosave.metadata.video_file && savedAutosave.metadata.video_file === f.name){
+          const ok = confirm('Found a local autosave for this video. Restore annotations from local backup?');
+          if(ok) applyAutosave(savedAutosave);
+        }
+      }catch(e){}
+    };
+
     try{
-      const fname = (f.name || '').toLowerCase();
-      let matched = null;
-      Object.keys(TASK_ABBREV_MAP).forEach(task =>{
-        try{
-          const ab = String(TASK_ABBREV_MAP[task] || '').toLowerCase();
-          const taskLower = String(task || '').toLowerCase();
-          if(!ab) return;
-          if(fname.includes(ab) || fname.includes(taskLower) || fname.includes(taskLower.replace('_',''))){ matched = task; }
-        }catch(e){}
-      });
-      if(matched){
-        if(taskTypeSel){ try{ suppressClearOnTaskSwitch = true; taskTypeSel.value = matched; taskTypeSel.dispatchEvent(new Event('change')); }catch(e){} }
-        else { TASK_CONFIG = `config/${matched}.yaml`; try{ loadConfig(); }catch(e){} }
+      const savedFile = (savedAutosave && savedAutosave.metadata && savedAutosave.metadata.video_file) ? String(savedAutosave.metadata.video_file) : null;
+      if(savedFile && savedFile !== f.name){
+        const msg = `Selected file "${f.name}" differs from annotations saved for "${savedFile}". Proceeding may mismatch timestamps.`;
+        const choices = [ {key:'P', label: 'Proceed with selected file'}, {key:'C', label: 'Cancel file selection'} ];
+        showConflictModal(msg, choices, (choice)=>{
+          if(!choice) return;
+          if(choice === 'C'){
+            try{ video.pause(); }catch(e){}
+            try{ video.removeAttribute('src'); }catch(e){}
+            try{ if(typeof video.load === 'function') video.load(); }catch(e){}
+            try{ if(videoFile) videoFile.value = ''; }catch(e){}
+            try{ if(videoFileDisplay) videoFileDisplay.textContent = ''; }catch(e){}
+            try{ if(video && video.dataset) video.dataset.filename = ''; }catch(e){}
+            try{ URL.revokeObjectURL(blobUrl); }catch(e){}
+            return;
+          }
+          handleFileAccepted();
+        });
+      } else {
+        handleFileAccepted();
       }
-    }catch(e){}
-    // apply selected playback speed when loading a file
-    const sp = parseFloat(changeSpeed && changeSpeed.value) || 1.0;
-    video.playbackRate = sp;
-    // If there's a saved autosave that matches this video's filename, offer to restore it as a backup.
-    try{
-      if(savedAutosave && savedAutosave.metadata && savedAutosave.metadata.video_file && savedAutosave.metadata.video_file === f.name){
-        const ok = confirm('Found a local autosave for this video. Restore annotations from local backup?');
-        if(ok) applyAutosave(savedAutosave);
-      }
-    }catch(e){}
+    }catch(e){ handleFileAccepted(); }
   });
 
   // Do NOT auto-fill duration from video; default is provided in the form (600s)
