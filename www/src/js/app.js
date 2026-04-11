@@ -272,6 +272,44 @@
           else { TASK_CONFIG = `config/${matched}.yaml`; try{ loadConfig(); }catch(e){} }
         }
       }catch(e){}
+      // try to extract testing metadata (subjectId/date/time) from filename
+      try{
+        (function fillFromFilename(fn){
+          if(!fn) return;
+          const base = fn.split('/').pop().replace(/\.[^.]+$/, '');
+          try{
+            const parts = base.split('_');
+            // Look for a YYYY-MM-DD token in parts
+            let dateIdx = -1;
+            for(let i=0;i<parts.length;i++){ if(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(parts[i])){ dateIdx = i; break; } }
+            if(dateIdx !== -1){
+              const date = parts[dateIdx];
+              const subj = (dateIdx>0)? parts[dateIdx-1] : null;
+              let time = null;
+              if(parts.length > dateIdx+1){
+                const tpart = parts[dateIdx+1];
+                const tm = tpart.match(/([0-9]{2}-[0-9]{2}-[0-9]{2})/);
+                if(tm) time = tm[1].replace(/-/g,':');
+              }
+              if(subj){ try{ if(document.getElementById('subjectId') && !document.getElementById('subjectId').value) document.getElementById('subjectId').value = subj; }catch(e){} }
+              if(date){ try{ if(document.getElementById('date') && !document.getElementById('date').value) document.getElementById('date').value = date; }catch(e){} }
+              if(time){ try{ if(document.getElementById('time') && !document.getElementById('time').value) document.getElementById('time').value = time; }catch(e){} }
+              return;
+            }
+            // Pattern: YYYYMMDD_SUBJ_...
+            if(/^[0-9]{8}_/.test(base)){
+              const m = base.match(/^([0-9]{8})_([A-Za-z0-9-]+)/);
+              if(m){ const d8 = m[1]; const subj = m[2]; const date = `${d8.slice(0,4)}-${d8.slice(4,6)}-${d8.slice(6,8)}`;
+                try{ if(document.getElementById('subjectId') && !document.getElementById('subjectId').value) document.getElementById('subjectId').value = subj; }catch(e){}
+                try{ if(document.getElementById('date') && !document.getElementById('date').value) document.getElementById('date').value = date; }catch(e){}
+                return; }
+            }
+            // Pattern: YYYY-MM-DD_SUBJ_...
+            const m2 = base.match(/^([0-9]{4}-[0-9]{2}-[0-9]{2})_([A-Za-z0-9-]+)/);
+            if(m2){ const date = m2[1]; const subj = m2[2]; try{ if(document.getElementById('subjectId') && !document.getElementById('subjectId').value) document.getElementById('subjectId').value = subj; }catch(e){} try{ if(document.getElementById('date') && !document.getElementById('date').value) document.getElementById('date').value = date; }catch(e){} return; }
+          }catch(e){}
+        })(f.name);
+      }catch(e){}
       // apply selected playback speed when loading a file
       const sp = parseFloat(changeSpeed && changeSpeed.value) || 1.0;
       video.playbackRate = sp;
