@@ -243,6 +243,12 @@
   videoFile.addEventListener('change', (e)=>{
     const f = e.target.files[0];
     if(!f) return;
+    // preserve previous loaded video/file state so canceling doesn't remove it
+    const prevVideoSrc = (video && video.getAttribute && video.getAttribute('src')) ? video.getAttribute('src') : (video && video.src ? video.src : null);
+    const prevDatasetFilename = (video && video.dataset) ? (video.dataset.filename || '') : '';
+    const prevFileInputValue = videoFile ? videoFile.value : '';
+    const prevDisplayText = videoFileDisplay ? videoFileDisplay.textContent : '';
+
     const blobUrl = URL.createObjectURL(f);
     video.src = blobUrl;
     video.dataset.filename = f.name;
@@ -282,21 +288,45 @@
       const savedFile = (savedAutosave && savedAutosave.metadata && savedAutosave.metadata.video_file) ? String(savedAutosave.metadata.video_file) : null;
       if(savedFile && savedFile !== f.name){
         const msg = `Selected file "${f.name}" differs from annotations saved for "${savedFile}". Proceeding may mismatch timestamps.`;
-        const choices = [ {key:'P', label: 'Proceed with selected file'}, {key:'C', label: 'Cancel file selection'} ];
-        showConflictModal(msg, choices, (choice)=>{
-          if(!choice) return;
-          if(choice === 'C'){
-            try{ video.pause(); }catch(e){}
-            try{ video.removeAttribute('src'); }catch(e){}
-            try{ if(typeof video.load === 'function') video.load(); }catch(e){}
-            try{ if(videoFile) videoFile.value = ''; }catch(e){}
-            try{ if(videoFileDisplay) videoFileDisplay.textContent = ''; }catch(e){}
-            try{ if(video && video.dataset) video.dataset.filename = ''; }catch(e){}
-            try{ URL.revokeObjectURL(blobUrl); }catch(e){}
-            return;
-          }
-          handleFileAccepted();
-        });
+        const choices = [ {key:'E', label: 'Export & clear'}, {key:'L', label: 'Clear and load new file'}, {key:'C', label: 'Cancel file selection'} ];
+          showConflictModal(msg, choices, (choice)=>{
+            // treat modal dismissal (null/undefined) same as explicit Cancel
+            if(!choice || choice === 'C'){
+                // user cancelled: restore previous video/file state and revoke newly-created blob
+                try{ video.pause(); }catch(e){}
+                try{ if(prevVideoSrc){ video.src = prevVideoSrc; } else { video.removeAttribute && video.removeAttribute('src'); } }catch(e){}
+                try{ if(typeof video.load === 'function') video.load(); }catch(e){}
+                try{ if(videoFile) videoFile.value = ''; }catch(e){}
+                try{ if(videoFileDisplay) videoFileDisplay.textContent = prevDisplayText; }catch(e){}
+                try{ if(video && video.dataset) video.dataset.filename = prevDatasetFilename; }catch(e){}
+                try{ URL.revokeObjectURL(blobUrl); }catch(e){}
+                return;
+            }
+            // Export & clear: download current annotations then clear and load new file
+            if(choice === 'E'){
+              try{
+                const out = buildOutput();
+                download(JSON.stringify(out, null, 2), `${out.session_id || 'session'}.json`, 'application/json');
+              }catch(e){ console.error('export before clear failed', e); }
+              // fallthrough to clearing
+            }
+            // Clear (either chosen explicitly or after export): wipe annotations and proceed to load new file
+            if(choice === 'L' || choice === 'E'){
+              try{ stateTimeline = []; }catch(e){}
+              try{ eventTimeline = []; }catch(e){}
+              try{ activeEvents = {}; }catch(e){}
+              try{ subjectInTime = null; }catch(e){}
+              try{ manualFlags = []; }catch(e){}
+              // clear testing/session metadata fields
+              try{ if(document.getElementById('scorer')) document.getElementById('scorer').value = ''; }catch(e){}
+              try{ if(document.getElementById('subjectId')) document.getElementById('subjectId').value = ''; }catch(e){}
+              try{ if(document.getElementById('date')) document.getElementById('date').value = ''; }catch(e){}
+              try{ if(document.getElementById('time')) document.getElementById('time').value = ''; }catch(e){}
+              try{ renderStateList(); renderEventList(); renderSubjectIn(); saveAutosave(); }catch(e){}
+              // proceed to load the newly-selected file
+              handleFileAccepted();
+            }
+          });
       } else {
         handleFileAccepted();
       }
