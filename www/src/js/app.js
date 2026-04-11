@@ -1272,16 +1272,58 @@
   // initialize task selector and handle changes
   try{
     if(taskTypeSel){
-      // set selector to match default TASK_CONFIG
+      // set selector to match default TASK_CONFIG and track previous value
       try{ const basename = TASK_CONFIG.split('/').pop().replace('.yaml',''); taskTypeSel.value = basename; }catch(e){}
+      let previousTaskVal = null;
+      try{ previousTaskVal = (taskTypeSel && taskTypeSel.value) ? taskTypeSel.value : (TASK_CONFIG.split('/').pop().replace('.yaml','')); }catch(e){}
       taskTypeSel.addEventListener('change', ()=>{
-        if(!confirm('Change task type and reload configuration? Existing annotations will be left in place. Continue?')){
-          // revert selection to current
-          try{ const basename = TASK_CONFIG.split('/').pop().replace('.yaml',''); taskTypeSel.value = basename; }catch(e){}
-          return;
+        const newTask = taskTypeSel.value;
+        // if unchanged or we have no previous value, just switch
+        if(!previousTaskVal || previousTaskVal === newTask){ previousTaskVal = newTask; TASK_CONFIG = `config/${newTask}.yaml`; try{ loadConfig(); ensureEventTables(); renderEventList(); renderStateList(); }catch(e){}; return; }
+
+        // if there are annotations, prompt user to export or clear
+        const hasAnnotations = (stateTimeline && stateTimeline.length>0) || (eventTimeline && eventTimeline.length>0) || (activeEvents && Object.keys(activeEvents).length>0) || (subjectInTime !== null);
+        if(hasAnnotations){
+          const msg = `Changing task to ${newTask} will clear current annotations from the window. You may want to export current annotations to JSON first.`;
+          const choices = [ {key:'E', label: 'Export & switch'}, {key:'S', label: 'Switch & clear'} ];
+          showConflictModal(msg, choices, (choice)=>{
+            if(!choice){ // cancelled -> restore previous selection
+              try{ taskTypeSel.value = previousTaskVal; }catch(e){}
+              return;
+            }
+            if(choice === 'E'){
+              try{ const out = buildOutput(); const filename = `${out.session_id || 'session'}.json`; download(JSON.stringify(out, null, 2), filename, 'application/json'); }catch(e){}
+            }
+            // clear current annotations and form fields, then switch task
+            try{
+              stateTimeline = []; eventTimeline = []; activeEvents = {}; manualFlags = []; subjectInTime = null;
+              try{ const el = document.getElementById('subjectId'); if(el) el.value = ''; }catch(e){}
+              try{ const el = document.getElementById('scorer'); if(el) el.value = ''; }catch(e){}
+              try{ const el = document.getElementById('date'); if(el) el.value = ''; }catch(e){}
+              try{ const el = document.getElementById('time'); if(el) el.value = ''; }catch(e){}
+              try{ if(video){ try{ video.pause(); }catch(e){} try{ video.removeAttribute('src'); }catch(e){} try{ if(typeof video.load === 'function') video.load(); }catch(e){} } }catch(e){}
+              try{ if(videoFile) videoFile.value = ''; }catch(e){}
+              try{ if(videoFileDisplay) videoFileDisplay.textContent = ''; }catch(e){}
+              try{ if(video && video.dataset) video.dataset.filename = ''; }catch(e){}
+            }catch(e){}
+            TASK_CONFIG = `config/${newTask}.yaml`;
+            previousTaskVal = newTask;
+            try{ loadConfig(); ensureEventTables(); renderEventList(); renderStateList(); renderSubjectIn(); saveAutosave(); }catch(e){}
+          });
+        } else {
+          // no annotations, safe to switch; clear form fields and video info per preference
+          try{ const el = document.getElementById('subjectId'); if(el) el.value = ''; }catch(e){}
+          try{ const el = document.getElementById('scorer'); if(el) el.value = ''; }catch(e){}
+          try{ const el = document.getElementById('date'); if(el) el.value = ''; }catch(e){}
+          try{ const el = document.getElementById('time'); if(el) el.value = ''; }catch(e){}
+          try{ if(video){ try{ video.pause(); }catch(e){} try{ video.removeAttribute('src'); }catch(e){} try{ if(typeof video.load === 'function') video.load(); }catch(e){} } }catch(e){}
+          try{ if(videoFile) videoFile.value = ''; }catch(e){}
+          try{ if(videoFileDisplay) videoFileDisplay.textContent = ''; }catch(e){}
+          try{ if(video && video.dataset) video.dataset.filename = ''; }catch(e){}
+          TASK_CONFIG = `config/${newTask}.yaml`;
+          previousTaskVal = newTask;
+          try{ loadConfig(); ensureEventTables(); renderEventList(); renderStateList(); saveAutosave(); }catch(e){}
         }
-        TASK_CONFIG = `config/${taskTypeSel.value}.yaml`;
-        try{ loadConfig(); ensureEventTables(); renderEventList(); renderStateList(); }catch(e){ console.error('reload config error', e); }
       });
     }
   }catch(e){}
