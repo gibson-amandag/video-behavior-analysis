@@ -61,6 +61,12 @@
 
   function seconds(){ return video.currentTime || 0; }
 
+  function isWithinSession(t){
+    if(typeof t !== 'number' || subjectInTime == null) return false;
+    const end = sessionEnd();
+    return (t >= subjectInTime - 1e-6) && (t <= end + 1e-6);
+  }
+
   function sessionEnd(){
     if(subjectInTime === null) return Infinity;
     const pd = (videoDurInput && videoDurInput.value) ? parseFloat(videoDurInput.value) : 600;
@@ -580,15 +586,20 @@
   function toggleEventByName(evName){
     if(!evName) return;
     if(activeEvents[evName]){
-      // stop
+      // stop (validate times similar to stopEventBtn)
       const s = activeEvents[evName];
       const e = +seconds().toFixed(3);
+      if(!isWithinSession(e)){ alert('Event end must be at or before session end and after subject placement.'); return; }
+      if(e <= s + 1e-6){ alert('End time must be greater than start time'); return; }
+      if(!isWithinSession(s)){ alert('Event start was outside the session; not saving.'); delete activeEvents[evName]; renderEventList(); return; }
       eventTimeline.push({start: s, end: e, event: evName});
       delete activeEvents[evName];
       renderEventList(); saveAutosave();
     } else {
-      // start
-      activeEvents[evName] = +seconds().toFixed(3);
+      // start (validate like startEventBtn)
+      const now = +seconds().toFixed(3);
+      if(!isWithinSession(now)){ alert('Event start must be at or after subject placement and before session end.'); return; }
+      activeEvents[evName] = now;
       renderEventList(); saveAutosave();
     }
   }
@@ -684,7 +695,9 @@
   startEventBtn.addEventListener('click', ()=>{
     const ev = eventTypeSel.value;
     if(activeEvents[ev]){ alert('Event already active'); return; }
-    activeEvents[ev] = +seconds().toFixed(3);
+    const now = +seconds().toFixed(3);
+    if(!isWithinSession(now)){ alert('Event start must be at or after subject placement and before session end.'); return; }
+    activeEvents[ev] = now;
     renderEventList();
     saveAutosave();
   });
@@ -694,6 +707,9 @@
     const s = activeEvents[ev];
     if(!s){ alert('No active event to stop'); return; }
     const e = +seconds().toFixed(3);
+    if(!isWithinSession(e)){ alert('Event end must be at or before session end and after subject placement.'); return; }
+    if(e <= s + 1e-6){ alert('End time must be greater than start time'); return; }
+    if(!isWithinSession(s)){ alert('Event start was outside the session; not saving.'); delete activeEvents[ev]; renderEventList(); return; }
     eventTimeline.push({start: s, end: e, event: ev});
     delete activeEvents[ev];
     renderEventList();
