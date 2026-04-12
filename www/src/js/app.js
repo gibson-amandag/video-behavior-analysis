@@ -730,7 +730,8 @@
     // compute session duration end time (subjectInTime + duration)
     let dur = null;
     if(videoDurInput && videoDurInput.value){ const p = parseFloat(videoDurInput.value); if(!Number.isNaN(p)) dur = p; }
-    for(let i=0;i<stateTimeline.length;i++){
+    // Render most-recent states first so new entries appear near the video (top of table)
+    for(let i = stateTimeline.length - 1; i >= 0; i--){
       const a = stateTimeline[i];
       // mark complementary rows visually
       const isComplement = a && a.manual_flag === 'complementary';
@@ -775,7 +776,7 @@
       tdDur.textContent = (durVal !== null && !Number.isNaN(durVal))? durVal.toFixed(3) : '—';
       const tdAct = document.createElement('td');
       const edit = document.createElement('button'); edit.className = 'btn btn-sm btn-outline-secondary me-1'; edit.textContent='Edit';
-      const isInitialPlacement = (i === 0 && subjectInTime !== null && Math.abs((a.start||0) - subjectInTime) < 1e-6);
+      const isInitialPlacement = (subjectInTime != null && Math.abs((a.start||0) - subjectInTime) < 1e-6);
       edit.addEventListener('click', ()=>{
         // Inline edit: replace timestamp cell with an input and Save/Cancel buttons
         try{
