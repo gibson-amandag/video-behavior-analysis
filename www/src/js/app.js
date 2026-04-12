@@ -348,7 +348,14 @@
       video.playbackRate = sp;
       // If there's a saved autosave that matches this video's filename, offer to restore it as a backup.
       try{
-        if(savedAutosave && savedAutosave.metadata && savedAutosave.metadata.video_file && savedAutosave.metadata.video_file === f.name){
+        // Consider it a real autosave only if it contains timeline/event entries or a recorded subject placement.
+        const savedHasAnnotations = savedAutosave && (
+          (savedAutosave.stateTimeline && savedAutosave.stateTimeline.length>0) ||
+          (savedAutosave.eventTimeline && savedAutosave.eventTimeline.length>0) ||
+          (savedAutosave.metadata && savedAutosave.metadata.subject_in_time_s != null)
+        );
+        try{ console.log('autosave-restore-check', { savedHasAnnotations, savedAutosave }); }catch(e){}
+        if(savedAutosave && savedAutosave.metadata && savedAutosave.metadata.video_file && savedAutosave.metadata.video_file === f.name && savedHasAnnotations){
           const ok = confirm('Found a local autosave for this video. Restore annotations from local backup?');
           if(ok) applyAutosave(savedAutosave);
         }
