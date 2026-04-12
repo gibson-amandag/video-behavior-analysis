@@ -195,11 +195,23 @@
       <div id="eventTablesContainer"></div>
     </section>
 
+    
     <section class="exports mt-3">
-      <button id="exportJson_bottom" class="exportJson btn btn-outline-primary btn-sm me-2">Export JSON</button>
-      <!-- <button id="exportCsv" class="btn btn-outline-secondary btn-sm me-2">Export CSV</button> -->
-      
-      <button id="clearAll" class="btn btn-danger btn-sm">Clear All</button>
+        <button id="exportJson_bottom" class="exportJson btn btn-outline-primary btn-sm me-2">Export JSON</button>
+        <!-- <button id="exportCsv" class="btn btn-outline-secondary btn-sm me-2">Export CSV</button> -->
+        
+        <button id="clearAll" class="btn btn-danger btn-sm">Clear All</button>
+    </section>
+    
+    <section class="definitions mt-4">
+      <h2>Definitions</h2>
+      <div class="small text-muted mb-2">Definitions loaded from the selected task YAML.</div>
+      <table id="definitionsTable" class="table table-sm">
+        <thead>
+          <tr><th>Behavior</th><th>Definition</th></tr>
+        </thead>
+        <tbody id="definitionsBody"></tbody>
+      </table>
     </section>
   </div>
 

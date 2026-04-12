@@ -20,3 +20,9 @@ colors:
   CENTER: '#cccccc'
   OPEN: '#dddddd'
 duration: 300
+definitions:
+  - Entries to a space: The TWO FRONT PAWS must enter the space for it to count as an entry.
+  - Grooming: Time spent paw licking, face washing, body grooming, or scratching. DO NOT COUNT INDIVIDUAL LICKS as the start/stop of a grooming bout. A "start" on the grooming timer should be the start of an entire grooming session, which may include grooming different parts of the body
+  - Center Consideration: For analysis, the center is considered part of the closed arms. For scoring within the app, score the center separately.
+  - Stretch Attends: The number of times a rat reaches one paw (and maybe its head) into the open arm, but does not fully enter the open arm. A stretch attend can precede a full entry as long as they sit there and pause in the stretch attend position before bringing in the second paw
+  - Rearing: Number of times a rat raises its TWO FRONT PAWS off the ground

@@ -17,3 +17,8 @@ colors:
   CENTER: '#ffeeaa'
   EDGE: '#dddddd'
 duration: 600
+definitions:
+  - Entries to a space: The TWO FRONT PAWS must enter the space for it to count as an entry.
+  - Center Crossings: Number of times a rat crosses from one side of the chamber to the opposite side by going through the center area (think diagonal crossings from corner to corner or straight across from one side to the opposite side)
+  - Grooming: Time spent paw licking, face washing, body grooming, or scratching. DO NOT COUNT INDIVIDUAL LICKS as the start/stop of a grooming bout. A "start" on the grooming timer should be the start of an entire grooming session, which may include grooming different parts of the body
+  - Rearing: Number of times a rat raises its TWO FRONT PAWS off the ground

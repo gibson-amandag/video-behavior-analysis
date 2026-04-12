@@ -55,6 +55,7 @@
   const setStartStateBtn = document.getElementById('setStartState');
   const startStateSel = document.getElementById('startState');
   const taskTypeSel = document.getElementById('taskType');
+  const definitionsBody = document.getElementById('definitionsBody');
 
   
 
@@ -994,6 +995,45 @@
     }catch(e){}
   }
 
+  function renderDefinitions(cfg){
+    try{
+      if(!definitionsBody) return;
+      definitionsBody.innerHTML = '';
+      if(!cfg || typeof cfg.definitions === 'undefined' || cfg.definitions === null) return;
+      const defs = cfg.definitions;
+      const rows = [];
+      if(Array.isArray(defs)){
+        defs.forEach((d,i)=>{
+          if(typeof d === 'string'){
+            rows.push({term: (i+1).toString(), text: d});
+          } else if(d && typeof d === 'object'){
+            // array entry is a mapping: show each key: value pair
+            Object.keys(d).forEach(k=>{
+              const v = d[k];
+              rows.push({term: k, text: (typeof v === 'string') ? v : JSON.stringify(v)});
+            });
+          } else {
+            rows.push({term: (i+1).toString(), text: String(d)});
+          }
+        });
+      } else if(defs && typeof defs === 'object'){
+        Object.keys(defs).forEach((k,i)=>{
+          const v = defs[k];
+          rows.push({term: k, text: (typeof v === 'string') ? v : JSON.stringify(v)});
+        });
+      } else {
+        rows.push({term: '1', text: String(defs)});
+      }
+      rows.forEach(r=>{
+        const tr = document.createElement('tr');
+        const th = document.createElement('th'); th.scope = 'row'; th.textContent = r.term;
+        const td = document.createElement('td'); td.textContent = r.text;
+        tr.appendChild(th); tr.appendChild(td);
+        definitionsBody.appendChild(tr);
+      });
+    }catch(e){/* ignore render errors */}
+  }
+
   function renderEventList(){
     if(!eventTablesContainer) return;
     // ensure tables exist
@@ -1411,6 +1451,8 @@
         } else {
           // events not present in config; fall back to select/defaults
         }
+        // render definitions from config (if present)
+        try{ renderDefinitions(cfg); }catch(e){}
         // update state controls UI depending on number of states
         try{ updateStateControlsUI(); renderKeystrokes(); }catch(e){}
       }catch(e){
