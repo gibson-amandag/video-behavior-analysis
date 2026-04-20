@@ -11,8 +11,8 @@ states:
 events:
   - name: GROOMING
     key: g
-  - name: REARING
-    key: r
+  # - name: REARING
+  #   key: r
   - name: STRETCH-ATTEND
     key: t
 colors:
