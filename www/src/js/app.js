@@ -56,6 +56,16 @@
   const startStateSel = document.getElementById('startState');
   const taskTypeSel = document.getElementById('taskType');
   const definitionsBody = document.getElementById('definitionsBody');
+  const conversionStartStateSel = document.getElementById('conversionStartState');
+  const conversionEventInputs = document.getElementById('conversionEventInputs');
+  const timestampModeSel = document.getElementById('timestampMode');
+  const placementClockGroup = document.getElementById('placementClockGroup');
+  const conversionMessage = document.getElementById('conversionMessage');
+  const conversionJson = document.getElementById('conversionJson');
+  const downloadConvertedJsonBtn = document.getElementById('downloadConvertedJson');
+  const conversionTaskTypeSel = document.getElementById('conversionTaskType');
+  let convertedSpreadsheetOutput = null;
+  let spreadsheetConfigTask = null;
 
   
 
@@ -878,25 +888,26 @@
           }
           // For multi-state tasks (3+ states) use a simple confirm for deletions.
           if(stateTypes && stateTypes.length >= 3){
-            if(confirm(`Delete state at ${formatTimeSec(stateTimeline[idx].start)}?`)){
-              // check whether deleting this entry would create two identical consecutive states
-              const prev = (idx>0)? stateTimeline[idx-1]: null;
-              const next = (idx+1 < stateTimeline.length)? stateTimeline[idx+1]: null;
-              if(prev && next && prev.state === next.state){
-                // ask user whether to delete all future entries or cancel
-                const msg = `Deleting this entry would make ${prev.state} occur twice in a row. Delete all future entries from here or cancel?`;
-                const choices = [ {key:'A', label: 'Delete all future entries (from here)'} ];
-                showConflictModal(msg, choices, (choice)=>{
-                  if(!choice) return; // cancelled
-                  if(choice === 'A'){
-                    stateTimeline.splice(idx);
-                    renderStateList(); saveAutosave();
-                  }
-                });
-              } else {
+            const prev = (idx > 0) ? stateTimeline[idx - 1] : null;
+            const next = (idx + 1 < stateTimeline.length) ? stateTimeline[idx + 1] : null;
+            if(prev && next && prev.state === next.state){
+              const msg = `Deleting this entry would make ${prev.state} occur twice in a row. Combining with the next state removes this entry and the next transition, extending the previous ${prev.state} state through both intervals.`;
+              const choices = [
+                {key:'A', label: 'Delete all future'},
+                {key:'M', label: 'Combine with next state'}
+              ];
+              showConflictModal(msg, choices, (choice)=>{
+                if(choice === 'A'){
+                  stateTimeline.splice(idx);
+                  renderStateList(); saveAutosave();
+                } else if(choice === 'M'){
+                  stateTimeline.splice(idx, 2);
+                  renderStateList(); saveAutosave();
+                }
+              });
+            } else if(confirm(`Delete state at ${formatTimeSec(stateTimeline[idx].start)}?`)){
                 stateTimeline.splice(idx,1);
                 renderStateList(); saveAutosave();
-              }
             }
           } else {
             // intermediary entry: prompt user with options
@@ -1317,6 +1328,231 @@
     return out;
   }
 
+  function renderSpreadsheetConverterFields(cfg){
+    spreadsheetConfigTask = taskTypeSel && taskTypeSel.value ? taskTypeSel.value : null;
+    if(conversionStartStateSel){
+      const selected = conversionStartStateSel.value;
+      conversionStartStateSel.innerHTML = '';
+      (stateTypes || []).forEach(state=>{
+        const option = document.createElement('option');
+        option.value = state;
+        option.textContent = state;
+        conversionStartStateSel.appendChild(option);
+      });
+      if(stateTypes && stateTypes.includes(selected)) conversionStartStateSel.value = selected;
+      else if(cfg && cfg.default_start) conversionStartStateSel.value = cfg.default_start;
+    }
+
+    const durationInput = document.getElementById('conversionDuration');
+    if(durationInput && cfg && Number.isFinite(Number(cfg.duration))) {
+      durationInput.value = Number(cfg.duration);
+    }
+
+    if(!conversionEventInputs) return;
+    conversionEventInputs.innerHTML = '';
+    (eventTypes || []).forEach((event, index)=>{
+      const column = document.createElement('div');
+      column.className = 'col-md-6';
+      const label = document.createElement('label');
+      label.className = 'form-label';
+      label.htmlFor = `conversionEvent${index}`;
+      label.textContent = `${event.name} start/end pairs`;
+      const textarea = document.createElement('textarea');
+      textarea.id = `conversionEvent${index}`;
+      textarea.className = 'form-control paste-data conversion-event-data';
+      textarea.rows = 5;
+      textarea.dataset.event = event.name;
+      textarea.placeholder = 'Start time / End time';
+      column.appendChild(label);
+      column.appendChild(textarea);
+      conversionEventInputs.appendChild(column);
+    });
+  }
+
+  function parseTimestampSeconds(value, mode){
+    const text = String(value || '').trim();
+    if(!text) throw new Error('Timestamp is blank.');
+    if(mode === 'clock'){
+      const match = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}(?:\.\d+)?))?$/);
+      if(!match) throw new Error(`"${text}" is not a clock time. Use HH:MM or HH:MM:SS.`);
+      const hours = Number(match[1]);
+      const minutes = Number(match[2]);
+      const secondsPart = Number(match[3] || 0);
+      if(hours > 23 || minutes > 59 || secondsPart >= 60) throw new Error(`"${text}" is outside the clock-time range.`);
+      return hours * 3600 + minutes * 60 + secondsPart;
+    }
+
+    if(/^\d+(?:\.\d+)?$/.test(text)) return Number(text);
+    const parts = text.split(':');
+    if(parts.length === 2){
+      const minutes = Number(parts[0]);
+      const secondsPart = Number(parts[1]);
+      if(!/^\d+$/.test(parts[0]) || !/^\d{1,2}(?:\.\d+)?$/.test(parts[1]) || secondsPart >= 60) {
+        throw new Error(`"${text}" is not valid elapsed time.`);
+      }
+      return minutes * 60 + secondsPart;
+    }
+    if(parts.length === 3){
+      const hours = Number(parts[0]);
+      const minutes = Number(parts[1]);
+      const secondsPart = Number(parts[2]);
+      if(!/^\d+$/.test(parts[0]) || !/^\d{1,2}$/.test(parts[1]) ||
+         !/^\d{1,2}(?:\.\d+)?$/.test(parts[2]) || minutes > 59 || secondsPart >= 60){
+        throw new Error(`"${text}" is not valid elapsed time.`);
+      }
+      return hours * 3600 + minutes * 60 + secondsPart;
+    }
+    throw new Error(`"${text}" is not valid elapsed time. Use seconds, MM:SS, or HH:MM:SS.`);
+  }
+
+  function spreadsheetTimestampToVideoTime(value, mode, placementOffset, placementClockSeconds){
+    const parsed = parseTimestampSeconds(value, mode === 'clock' ? 'clock' : 'elapsed');
+    if(mode === 'video') return parsed;
+    if(mode === 'elapsed') return placementOffset + parsed;
+    let sincePlacement = parsed - placementClockSeconds;
+    if(sincePlacement < 0) sincePlacement += 24 * 3600;
+    return placementOffset + sincePlacement;
+  }
+
+  function spreadsheetRows(text){
+    return String(text || '').split(/\r?\n/).map((line, index)=>({
+      line: index + 1,
+      cells: line.includes('\t') ? line.split('\t') : line.split(',')
+    })).filter(row=>row.cells.some(cell=>String(cell).trim() !== ''));
+  }
+
+  function buildSpreadsheetOutput(){
+    const subjectId = document.getElementById('conversionSubjectId').value.trim();
+    const scorer = document.getElementById('conversionScorer').value.trim();
+    const videoFile = document.getElementById('conversionVideoFile').value.trim();
+    const date = document.getElementById('conversionDate').value;
+    const enteredTime = document.getElementById('conversionTime').value.trim();
+    const placementOffsetText = document.getElementById('placementOffset').value.trim();
+    let placementOffset;
+    const duration = Number(document.getElementById('conversionDuration').value);
+    const mode = timestampModeSel.value;
+    const stateNames = stateTypes || [];
+    const initialState = conversionStartStateSel.value;
+    const task = conversionTaskTypeSel ? conversionTaskTypeSel.value : (taskTypeSel && taskTypeSel.value);
+
+    if(!task || task !== (taskTypeSel && taskTypeSel.value) || task !== spreadsheetConfigTask) {
+      throw new Error('Task configuration is updating. Wait a moment and generate the preview again.');
+    }
+
+    if(!placementOffsetText) throw new Error('Enter the placement video offset.');
+    try{ placementOffset = parseTimestampSeconds(placementOffsetText, 'elapsed'); }
+    catch{ throw new Error('Enter the placement offset as seconds, MM:SS, or HH:MM:SS.'); }
+    if(!Number.isFinite(placementOffset) || placementOffset < 0) throw new Error('Placement video offset must be non-negative.');
+    if(!Number.isFinite(duration) || duration <= 0) {
+      throw new Error('Enter a session duration greater than zero.');
+    }
+    if(stateNames.length === 0 || !initialState) {
+      throw new Error('No states are available for the selected task configuration.');
+    }
+
+    let placementClockSeconds = null;
+    if(mode === 'clock'){
+      const placementClock = document.getElementById('placementClock').value.trim();
+      if(!placementClock) throw new Error('Enter the clock time when the subject was placed.');
+      placementClockSeconds = parseTimestampSeconds(placementClock, 'clock');
+    }
+
+    const sessionEnd = placementOffset + duration;
+    const stateRows = spreadsheetRows(document.getElementById('statePaste').value);
+    const states = [];
+    stateRows.forEach((row, index)=>{
+      const first = String(row.cells[0] || '').trim();
+      const second = String(row.cells[1] || '').trim();
+      if(index === 0 && /timestamp|^time$/i.test(first) && /^state$/i.test(second)) return;
+      if(row.cells.length < 2 || !first || !second) {
+        throw new Error(`State data row ${row.line} must have a timestamp and state.`);
+      }
+      const state = stateNames.find(name=>name.toLowerCase() === second.toLowerCase());
+      if(!state) throw new Error(`Unknown state "${second}" on state data row ${row.line}.`);
+      const start = spreadsheetTimestampToVideoTime(first, mode, placementOffset, placementClockSeconds);
+      if(start < placementOffset - 1e-6 || start >= sessionEnd) {
+        throw new Error(`State time on row ${row.line} must be within the session.`);
+      }
+      states.push({start: +start.toFixed(3), state});
+    });
+
+    states.sort((a,b)=>a.start-b.start);
+    const uniqueStates = [];
+    states.forEach(entry=>{
+      const previous = uniqueStates[uniqueStates.length - 1];
+      if(previous && Math.abs(previous.start - entry.start) < 1e-6){
+        if(previous.state !== entry.state) throw new Error(`Two different states have the same timestamp (${formatTimeSec(entry.start)}).`);
+        return;
+      }
+      uniqueStates.push(entry);
+    });
+    const placementEntry = uniqueStates.find(entry=>Math.abs(entry.start - placementOffset) < 1e-6);
+    if(!placementEntry) uniqueStates.unshift({start: +placementOffset.toFixed(3), state: initialState});
+
+    const stateTimeline = uniqueStates.map((entry, index)=>({
+      ...entry,
+      end: index + 1 < uniqueStates.length ? uniqueStates[index + 1].start : +sessionEnd.toFixed(3)
+    }));
+
+    const eventTimeline = [];
+    const eventTextareas = conversionEventInputs
+      ? conversionEventInputs.querySelectorAll('.conversion-event-data')
+      : [];
+    Array.from(eventTextareas).forEach(textarea=>{
+      const event = textarea.dataset.event;
+      spreadsheetRows(textarea.value).forEach((row, index)=>{
+        const startText = String(row.cells[0] || '').trim();
+        const endText = String(row.cells[1] || '').trim();
+        if(index === 0 && /start/i.test(startText) && /end/i.test(endText)) return;
+        if(row.cells.length < 2 || !startText || !endText) {
+          throw new Error(`${event} row ${row.line} must have both start and end times.`);
+        }
+        const start = spreadsheetTimestampToVideoTime(startText, mode, placementOffset, placementClockSeconds);
+        const end = spreadsheetTimestampToVideoTime(endText, mode, placementOffset, placementClockSeconds);
+        if(start < placementOffset - 1e-6 || end > sessionEnd + 1e-6) {
+          throw new Error(`${event} row ${row.line} must be within the session.`);
+        }
+        if(end <= start) throw new Error(`${event} row ${row.line} must end after it starts.`);
+        eventTimeline.push({start: +start.toFixed(3), end: +end.toFixed(3), event});
+      });
+    });
+    eventTimeline.sort((a,b)=>a.start-b.start);
+
+    const shortTag = TASK_ABBREV_MAP[task] || task.toUpperCase();
+    const outputDate = date || new Date().toISOString().slice(0,10);
+    const placementTime = mode === 'clock' ? document.getElementById('placementClock').value.trim() : '';
+    const time = enteredTime || (placementTime ? placementTime.slice(0, 5) : '');
+    const sessionId = `${subjectId || 'subject'}_${shortTag}_${outputDate}_${scorer || 'scorer'}`;
+
+    return {
+      session_id: sessionId,
+      task,
+      duration_s: duration,
+      subject: {species: 'rat', id: subjectId},
+      metadata: {
+        video_file: videoFile,
+        date,
+        time,
+        scorer,
+        comments: '',
+        subject_placed_at_s: +placementOffset.toFixed(3),
+        session_end_s: +sessionEnd.toFixed(3),
+        session_end_note: `Computed end = ${formatTimeSec(sessionEnd)} (${sessionEnd.toFixed(3)} s)`,
+        manual_flags: []
+      },
+      state_timeline: stateTimeline,
+      event_timeline: eventTimeline,
+      tool_version: TOOL_VERSION,
+      task_config: TASK_CONFIG
+    };
+  }
+
+  function updatePlacementClockVisibility(){
+    if(placementClockGroup && timestampModeSel){
+      placementClockGroup.classList.toggle('d-none', timestampModeSel.value !== 'clock');
+    }
+  }
+
   function download(content, filename, type){
     const blob = new Blob([content], {type: type});
     const url = URL.createObjectURL(blob);
@@ -1406,7 +1642,12 @@
       // if the imported session specifies a task, switch to it (but keep annotations loaded)
       try{
         const importedTask = parsed.task || (parsed.task_config ? parsed.task_config.split('/').pop().replace('.yaml','') : (parsed.metadata && parsed.metadata.task ? parsed.metadata.task : null));
-        if(importedTask){ TASK_CONFIG = `config/${importedTask}.yaml`; if(taskTypeSel) taskTypeSel.value = importedTask; try{ loadConfig(); }catch(e){} }
+        if(importedTask){
+          TASK_CONFIG = `config/${importedTask}.yaml`;
+          if(taskTypeSel) taskTypeSel.value = importedTask;
+          if(conversionTaskTypeSel) conversionTaskTypeSel.value = importedTask;
+          try{ loadConfig(); }catch(e){}
+        }
       }catch(e){}
       // set starting state from first state entry if available
       try{
@@ -1422,10 +1663,12 @@
   function loadConfig(){
     // reset previous config-derived globals so switching tasks clears old options/columns
     try{ additionalForState = {}; stateTypes = []; eventTypes = null; stateKeyMap = {}; if(startStateSel) startStateSel.innerHTML = ''; if(eventTypeSel) eventTypeSel.innerHTML = ''; if(addStateSelect) addStateSelect.innerHTML = ''; }catch(e){}
-    fetch(TASK_CONFIG).then(r=>{
+    const requestedConfig = TASK_CONFIG;
+    fetch(requestedConfig).then(r=>{
       if(!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.text();
     }).then(txt=>{
+      if(requestedConfig !== TASK_CONFIG) return;
       try{
         const cfg = jsyaml.load(txt);
         // load state types from config and populate start state select
@@ -1477,6 +1720,7 @@
         }
         // render definitions from config (if present)
         try{ renderDefinitions(cfg); }catch(e){}
+        renderSpreadsheetConverterFields(cfg);
         // update state controls UI depending on number of states
         try{ updateStateControlsUI(); renderKeystrokes(); }catch(e){}
       }catch(e){
@@ -1491,6 +1735,64 @@
   loadAutosave();
   try{ ensureEventTables(); renderEventList(); }catch(e){}
   loadConfig();
+  const spreadsheetConverter = document.querySelector('.spreadsheet-converter');
+  if(spreadsheetConverter){
+    const clearConvertedPreview = ()=>{
+      convertedSpreadsheetOutput = null;
+      if(conversionJson) conversionJson.value = '';
+      if(downloadConvertedJsonBtn) downloadConvertedJsonBtn.disabled = true;
+      if(conversionMessage) conversionMessage.textContent = '';
+    };
+    spreadsheetConverter.addEventListener('input', clearConvertedPreview);
+    spreadsheetConverter.addEventListener('change', clearConvertedPreview);
+    if(timestampModeSel) timestampModeSel.addEventListener('change', updatePlacementClockVisibility);
+    updatePlacementClockVisibility();
+    const convertButton = document.getElementById('convertSpreadsheet');
+    if(convertButton){
+      convertButton.addEventListener('click', ()=>{
+        try{
+          convertedSpreadsheetOutput = buildSpreadsheetOutput();
+          if(conversionJson) conversionJson.value = JSON.stringify(convertedSpreadsheetOutput, null, 2);
+          if(downloadConvertedJsonBtn) downloadConvertedJsonBtn.disabled = false;
+          if(conversionMessage){
+            conversionMessage.className = 'mt-2 text-success';
+            conversionMessage.textContent = 'JSON generated. Review the preview before downloading.';
+          }
+        }catch(error){
+          clearConvertedPreview();
+          if(conversionMessage){
+            conversionMessage.className = 'mt-2 text-danger';
+            conversionMessage.textContent = error.message;
+          }
+        }
+      });
+    }
+    if(downloadConvertedJsonBtn){
+      downloadConvertedJsonBtn.addEventListener('click', ()=>{
+        if(!convertedSpreadsheetOutput) return;
+        download(JSON.stringify(convertedSpreadsheetOutput, null, 2),
+          `${convertedSpreadsheetOutput.session_id || 'session'}.json`, 'application/json');
+      });
+    }
+  }
+  if(taskTypeSel) taskTypeSel.addEventListener('change', ()=>{
+    if(conversionTaskTypeSel) conversionTaskTypeSel.value = taskTypeSel.value;
+    if(spreadsheetConverter){
+      convertedSpreadsheetOutput = null;
+      if(conversionJson) conversionJson.value = '';
+      if(downloadConvertedJsonBtn) downloadConvertedJsonBtn.disabled = true;
+      if(conversionMessage) conversionMessage.textContent = '';
+    }
+  });
+  if(conversionTaskTypeSel && taskTypeSel){
+    conversionTaskTypeSel.value = taskTypeSel.value;
+    conversionTaskTypeSel.addEventListener('change', ()=>{
+      if(conversionTaskTypeSel.value !== taskTypeSel.value){
+        taskTypeSel.value = conversionTaskTypeSel.value;
+        taskTypeSel.dispatchEvent(new Event('change'));
+      }
+    });
+  }
 
   // initialize task selector and handle changes
   try{
@@ -1519,7 +1821,10 @@
           const choices = [ {key:'E', label: 'Export & switch'}, {key:'S', label: 'Switch & clear'} ];
           showConflictModal(msg, choices, (choice)=>{
             if(!choice){ // cancelled -> restore previous selection
-              try{ taskTypeSel.value = previousTaskVal; }catch(e){}
+              try{
+                taskTypeSel.value = previousTaskVal;
+                if(conversionTaskTypeSel) conversionTaskTypeSel.value = previousTaskVal;
+              }catch(e){}
               return;
             }
             if(choice === 'E'){

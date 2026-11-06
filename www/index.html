@@ -33,6 +33,17 @@
       </div>
     </div>
 
+    <ul class="nav nav-tabs mt-4" id="appTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="scoring-tab" data-bs-toggle="tab" data-bs-target="#scoring-pane" type="button" role="tab" aria-controls="scoring-pane" aria-selected="true">Video scoring</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="spreadsheet-tab" data-bs-toggle="tab" data-bs-target="#spreadsheet-pane" type="button" role="tab" aria-controls="spreadsheet-pane" aria-selected="false">Spreadsheet conversion</button>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="scoring-pane" role="tabpanel" aria-labelledby="scoring-tab" tabindex="0">
     <section class="controls g-2 align-items-end mt-5">
       <div class="row">
         <h3 class="col-12">Video File</h3>
@@ -213,6 +224,92 @@
         <tbody id="definitionsBody"></tbody>
       </table>
     </section>
+        </div>
+
+        <div class="tab-pane fade" id="spreadsheet-pane" role="tabpanel" aria-labelledby="spreadsheet-tab" tabindex="0">
+          <section class="spreadsheet-converter mt-4">
+            <h2>Convert spreadsheet scoring</h2>
+            <p>Paste spreadsheet cells below to create a JSON session in the same format as the video scoring tab. The placement video offset is required because the subject may be placed after the video begins.</p>
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label" for="conversionSubjectId">Subject ID</label>
+                <input id="conversionSubjectId" class="form-control" type="text" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="conversionTaskType">Behavior / task type</label>
+                <select id="conversionTaskType" class="form-select">
+                  <option value="open_field">Open Field (OFT)</option>
+                  <option value="light_dark">Light-Dark Box (LD)</option>
+                  <option value="elevated_plus">Elevated Plus Maze (EPM)</option>
+                </select>
+                <div class="form-text">Uses this task's state and event definitions.</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="conversionDate">Testing date</label>
+                <input id="conversionDate" class="form-control" type="date" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="conversionTime">Testing time</label>
+                <input id="conversionTime" class="form-control" type="time" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="conversionScorer">Scorer</label>
+                <input id="conversionScorer" class="form-control" type="text" />
+              </div>
+              <div class="col-md-8">
+                <label class="form-label" for="conversionVideoFile">Video file name</label>
+                <input id="conversionVideoFile" class="form-control" type="text" placeholder="e.g. Rat12_EPM_2025-10-01.mp4" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="placementOffset">Placement video offset</label>
+                <input id="placementOffset" class="form-control" type="text" placeholder="Seconds or MM:SS / HH:MM:SS" />
+                <div class="form-text">The video timestamp when the subject was placed; for example, 75.5 or 01:15.500.</div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="conversionDuration">Session duration after placement (seconds)</label>
+                <input id="conversionDuration" class="form-control" type="number" min="0" step="any" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="timestampMode">Pasted timestamp reference</label>
+                <select id="timestampMode" class="form-select">
+                  <option value="video">Video time (e.g. 00:12:34)</option>
+                  <option value="elapsed">Elapsed since placement (e.g. 00:00:05)</option>
+                  <option value="clock">Clock time (e.g. 14:22:57)</option>
+                </select>
+              </div>
+              <div class="col-md-6 d-none" id="placementClockGroup">
+                <label class="form-label" for="placementClock">Clock time when subject was placed</label>
+                <input id="placementClock" class="form-control" type="text" placeholder="HH:MM:SS" />
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="conversionStartState">State at placement</label>
+                <select id="conversionStartState" class="form-select"></select>
+                <div class="form-text">Used at the placement offset unless a pasted state row has that exact time.</div>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="statePaste">State data: TimeStamp_Start and State</label>
+                <textarea id="statePaste" class="form-control paste-data" rows="8" placeholder="Paste the two spreadsheet columns here (tab-separated), including or excluding headers."></textarea>
+                <div class="form-text">Each non-empty row must contain a timestamp and a state name from the selected task.</div>
+              </div>
+              <div class="col-12">
+                <h3 class="h5">Event start/end times</h3>
+                <p class="form-text">For each event, paste its start and end columns together. Use one start/end pair per row.</p>
+                <div id="conversionEventInputs" class="row g-3"></div>
+              </div>
+              <div class="col-12">
+                <button id="convertSpreadsheet" class="btn btn-primary" type="button">Generate JSON preview</button>
+                <div id="conversionMessage" class="mt-2" role="status" aria-live="polite"></div>
+              </div>
+              <div class="col-12">
+                <label class="form-label" for="conversionJson">JSON preview</label>
+                <textarea id="conversionJson" class="form-control paste-data" rows="14" readonly></textarea>
+                <button id="downloadConvertedJson" class="btn btn-outline-primary mt-2" type="button" disabled>Download JSON</button>
+              </div>
+            </div>
+          </section>
+        </div>
+    </div>
   </div>
 
   <script src="src/js/app.js"></script>
